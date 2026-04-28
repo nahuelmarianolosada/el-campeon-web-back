@@ -6,14 +6,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
-	"github.com/nahuelmarianolosada/el-campeon-web/internal/services"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/payment"
 )
 
 type PaymentHandler struct {
-	paymentService services.PaymentService
+	paymentService payment.PaymentService
 }
 
-func NewPaymentHandler(paymentService services.PaymentService) *PaymentHandler {
+func NewPaymentHandler(paymentService payment.PaymentService) *PaymentHandler {
 	return &PaymentHandler{
 		paymentService: paymentService,
 	}

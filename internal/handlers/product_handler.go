@@ -6,14 +6,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
-	"github.com/nahuelmarianolosada/el-campeon-web/internal/services"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/product"
 )
 
 type ProductHandler struct {
-	productService services.ProductService
+	productService product.ProductService
 }
 
-func NewProductHandler(productService services.ProductService) *ProductHandler {
+func NewProductHandler(productService product.ProductService) *ProductHandler {
 	return &ProductHandler{
 		productService: productService,
 	}
@@ -231,4 +231,3 @@ func (h *ProductHandler) ListProductsByCategory(c *gin.Context) {
 		"offset":   offset,
 	})
 }
-
