@@ -6,14 +6,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
-	"github.com/nahuelmarianolosada/el-campeon-web/internal/services"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/order"
 )
 
 type OrderHandler struct {
-	orderService services.OrderService
+	orderService order.OrderService
 }
 
-func NewOrderHandler(orderService services.OrderService) *OrderHandler {
+func NewOrderHandler(orderService order.OrderService) *OrderHandler {
 	return &OrderHandler{
 		orderService: orderService,
 	}
@@ -193,4 +193,3 @@ func (h *OrderHandler) ListAllOrders(c *gin.Context) {
 		"offset": offset,
 	})
 }
-

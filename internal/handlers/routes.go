@@ -5,7 +5,11 @@ import (
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/config"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/middleware"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/repositories"
-	"github.com/nahuelmarianolosada/el-campeon-web/internal/services"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/cart"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/order"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/payment"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/product"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/user"
 	"gorm.io/gorm"
 )
 
@@ -18,11 +22,11 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	paymentRepo := repositories.NewPaymentRepository(db)
 
 	// Inicializar servicios
-	userService := services.NewUserService(userRepo, cfg)
-	productService := services.NewProductService(productRepo)
-	cartService := services.NewCartService(cartRepo, productRepo)
-	orderService := services.NewOrderService(orderRepo, cartRepo, userRepo)
-	paymentService := services.NewPaymentService(paymentRepo, orderRepo, cfg)
+	userService := user.NewUserService(userRepo, cfg)
+	productService := product.NewProductService(productRepo)
+	cartService := cart.NewCartService(cartRepo, productRepo)
+	orderService := order.NewOrderService(orderRepo, cartRepo, userRepo)
+	paymentService := payment.NewPaymentService(paymentRepo, orderRepo, cfg)
 
 	// Inicializar handlers
 	authHandler := NewAuthHandler(userService)
@@ -86,6 +90,12 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	admin.Use(middleware.AuthMiddleware(cfg))
 	admin.Use(middleware.AdminMiddleware())
 	{
+		// Order admin routes
+		userAdmin := admin.Group("/api/admin")
+		{
+			userAdmin.POST("/users", authHandler.RegisterAdmin)
+		}
+
 		// Product admin routes
 		productAdmin := admin.Group("/api/products")
 		{
@@ -118,9 +128,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
-			"status": "ok",
+			"status":  "ok",
 			"service": "el-campeon-web",
 		})
 	})
 }
-

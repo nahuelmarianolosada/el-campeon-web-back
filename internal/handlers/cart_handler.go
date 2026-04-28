@@ -6,14 +6,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
-	"github.com/nahuelmarianolosada/el-campeon-web/internal/services"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/cart"
 )
 
 type CartHandler struct {
-	cartService services.CartService
+	cartService cart.CartService
 }
 
-func NewCartHandler(cartService services.CartService) *CartHandler {
+func NewCartHandler(cartService cart.CartService) *CartHandler {
 	return &CartHandler{
 		cartService: cartService,
 	}
@@ -194,4 +194,3 @@ func (h *CartHandler) GetCartTotal(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"total": total})
 }
-

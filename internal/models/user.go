@@ -7,19 +7,19 @@ import (
 )
 
 type User struct {
-	ID          uint       `gorm:"primaryKey"`
-	Email       string     `gorm:"type:varchar(255);uniqueIndex:idx_users_email;not null"`
-	FirstName   string     `gorm:"type:varchar(255);not null"`
-	LastName    string     `gorm:"type:varchar(255);not null"`
-	Password    string     `gorm:"type:varchar(255);not null"`
-	Phone       string     `gorm:"type:varchar(20)"`
-	Address     string     `gorm:"type:text"`
-	City        string     `gorm:"type:varchar(100)"`
-	PostalCode  string     `gorm:"type:varchar(20)"`
-	Country     string     `gorm:"type:varchar(100)"`
-	Role        string     `gorm:"type:enum('USER','ADMIN');default:'USER'"`
-	IsActive    bool       `gorm:"default:true"`
-	IsBulkBuyer bool       `gorm:"default:false"`
+	ID          uint   `gorm:"primaryKey"`
+	Email       string `gorm:"type:varchar(255);uniqueIndex:idx_users_email;not null"`
+	FirstName   string `gorm:"type:varchar(255);not null"`
+	LastName    string `gorm:"type:varchar(255);not null"`
+	Password    string `gorm:"type:varchar(255);not null"`
+	Phone       string `gorm:"type:varchar(20)"`
+	Address     string `gorm:"type:text"`
+	City        string `gorm:"type:varchar(100)"`
+	PostalCode  string `gorm:"type:varchar(20)"`
+	Country     string `gorm:"type:varchar(100)"`
+	Role        string `gorm:"type:enum('USER','ADMIN');default:'USER'"`
+	IsActive    bool   `gorm:"default:true"`
+	IsBulkBuyer bool   `gorm:"default:false"`
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	DeletedAt   gorm.DeletedAt `gorm:"index"`
@@ -52,6 +52,16 @@ type RegisterRequest struct {
 	City       string `json:"city"`
 	PostalCode string `json:"postal_code"`
 	Country    string `json:"country"`
+}
+
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+// RegisterRequest estructura para registro de usuario
+type RegisterAdminRequest struct {
+	RegisterRequest
+	Role string `json:"role" binding:"required,eq=ADMIN"`
 }
 
 // LoginRequest estructura para login
