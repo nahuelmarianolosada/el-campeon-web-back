@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: el_campeon_db
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_change_me
+      MYSQL_DATABASE: el_campeon_web
+      MYSQL_USER: el_campeon_user
+      MYSQL_PASSWORD: user_password_change_me
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - el_campeon_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+      interval: 10s
+
+  app:
+    build:
+      context: .
+      dockerfile: dockerfiles/Dockerfile
+    container_name: el_campeon_app
+    environment:
+      PORT: 8080
+      ENV: development
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: el_campeon_user
+      DB_PASSWORD: user_password_change_me
+      DB_NAME: el_campeon_web
+      JWT_SECRET_KEY: your-secret-key-change-in-production
+      JWT_REFRESH_SECRET: your-refresh-secret-change-in-production
+      JWT_EXPIRY_HOURS: 24
+      MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN}
+      MERCADOPAGO_PUBLIC_KEY: ${MERCADOPAGO_PUBLIC_KEY}
+      API_BASE_URL: http://localhost:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - el_campeon_network
+    restart: unless-stopped
+
+networks:
+  el_campeon_network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local
+
