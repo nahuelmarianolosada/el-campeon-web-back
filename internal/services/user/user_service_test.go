@@ -150,7 +150,10 @@ func TestLoginSuccess(t *testing.T) {
 		Password:  "SecurePassword123!",
 	}
 
-	service.Register(registerReq)
+	_, err := service.Register(registerReq)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
 
 	// Intentar login
 	loginReq := &models.LoginRequest{

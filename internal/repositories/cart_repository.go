@@ -83,4 +83,3 @@ func (r *cartRepository) GetCartItems(userID uint) ([]models.CartItem, error) {
 	}
 	return items, nil
 }
-

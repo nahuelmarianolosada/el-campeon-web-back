@@ -11,14 +11,14 @@ import (
 
 // MockOrderRepository
 type MockOrderRepository struct {
-	orders           map[uint]*models.Order
-	nextID           uint
-	CreateErr        error
-	FindByIDErr      error
-	FindByUserIDErr  error
-	FindAllErr       error
-	UpdateStatusErr  error
-	AddItemErr       error
+	orders          map[uint]*models.Order
+	nextID          uint
+	CreateErr       error
+	FindByIDErr     error
+	FindByUserIDErr error
+	FindAllErr      error
+	UpdateStatusErr error
+	AddItemErr      error
 }
 
 func NewMockOrderRepository() *MockOrderRepository {
@@ -119,8 +119,8 @@ func (m *MockOrderRepository) Delete(id uint) error {
 
 // MockCartRepository para Order Tests
 type MockOrderCartRepository struct {
-	carts          map[uint]*models.Cart
-	ClearCartErr   error
+	carts        map[uint]*models.Cart
+	ClearCartErr error
 }
 
 func NewMockOrderCartRepository() *MockOrderCartRepository {
@@ -371,7 +371,10 @@ func TestGetOrderByID_Success(t *testing.T) {
 			},
 		},
 	}
-	orderRepo.Create(order)
+	err := orderRepo.Create(order)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
 
 	// Obtener orden
 	resp, err := service.GetOrderByID(order.ID)
@@ -422,9 +425,18 @@ func TestGetOrdersByUserID_Success(t *testing.T) {
 		Total:       181.5,
 	}
 
-	orderRepo.Create(order1)
-	orderRepo.Create(order2)
-	orderRepo.Create(order3)
+	errOrder1 := orderRepo.Create(order1)
+	errOrder2 := orderRepo.Create(order2)
+	errOrder3 := orderRepo.Create(order3)
+	if errOrder1 != nil {
+		t.Fatalf("Expected no error, got %v", errOrder1)
+	}
+	if errOrder2 != nil {
+		t.Fatalf("Expected no error, got %v", errOrder2)
+	}
+	if errOrder3 != nil {
+		t.Fatalf("Expected no error, got %v", errOrder3)
+	}
 
 	// Obtener órdenes del usuario 1
 	resp, err := service.GetOrdersByUserID(1, 10, 0)
@@ -625,13 +637,18 @@ func BenchmarkGetOrderByID(b *testing.B) {
 			Tax:         21.0,
 			Total:       121.0,
 		}
-		orderRepo.Create(order)
+		err := orderRepo.Create(order)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		orderID := uint((i % 100) + 1)
-		service.GetOrderByID(orderID)
+		_, err := service.GetOrderByID(orderID)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
-

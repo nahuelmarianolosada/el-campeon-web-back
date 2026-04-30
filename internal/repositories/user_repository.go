@@ -57,4 +57,3 @@ func (r *userRepository) FindAll(limit, offset int) ([]models.User, error) {
 	}
 	return users, nil
 }
-

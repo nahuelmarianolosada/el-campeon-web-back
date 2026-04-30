@@ -75,4 +75,3 @@ func (r *paymentRepository) ListAll(limit, offset int) ([]models.Payment, error)
 func (r *paymentRepository) UpdateStatus(paymentID uint, status string) error {
 	return r.db.Model(&models.Payment{}).Where("id = ?", paymentID).Update("status", status).Error
 }
-

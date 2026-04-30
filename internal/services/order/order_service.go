@@ -161,9 +161,10 @@ func (s *orderService) ListAllOrders(limit, offset int) ([]models.OrderResponse,
 // Helper functions
 
 func (s *orderService) generateOrderNumber() string {
-	rand.Seed(time.Now().UnixNano())
+	src := rand.NewSource(time.Now().UnixNano())
+	r := rand.New(src)
 	prefix := time.Now().Format("20060102")
-	randomPart := rand.Intn(1000000)
+	randomPart := r.Intn(1000000)
 	return fmt.Sprintf("ORD-%s-%06d", prefix, randomPart)
 }
 

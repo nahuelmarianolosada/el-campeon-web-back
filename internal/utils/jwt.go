@@ -10,9 +10,9 @@ import (
 )
 
 type JWTClaims struct {
-	UserID   uint   `json:"user_id"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
+	UserID    uint   `json:"user_id"`
+	Email     string `json:"email"`
+	Role      string `json:"role"`
 	TokenType string `json:"token_type"` // "access" o "refresh"
 	jwt.RegisteredClaims
 }
@@ -21,9 +21,9 @@ type JWTClaims struct {
 func GenerateAccessToken(userID uint, email, role string, cfg *config.Config) (string, error) {
 	expiryTime := time.Now().Add(time.Duration(cfg.JWTExpiryHours) * time.Hour)
 	claims := &JWTClaims{
-		UserID:   userID,
-		Email:    email,
-		Role:     role,
+		UserID:    userID,
+		Email:     email,
+		Role:      role,
 		TokenType: "access",
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiryTime),
@@ -40,9 +40,9 @@ func GenerateAccessToken(userID uint, email, role string, cfg *config.Config) (s
 func GenerateRefreshToken(userID uint, email, role string, cfg *config.Config) (string, error) {
 	expiryTime := time.Now().Add(7 * 24 * time.Hour) // 7 días
 	claims := &JWTClaims{
-		UserID:   userID,
-		Email:    email,
-		Role:     role,
+		UserID:    userID,
+		Email:     email,
+		Role:      role,
 		TokenType: "refresh",
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiryTime),
@@ -110,4 +110,3 @@ func ValidateRefreshToken(tokenString string, cfg *config.Config) (*JWTClaims, e
 
 	return claims, nil
 }
-

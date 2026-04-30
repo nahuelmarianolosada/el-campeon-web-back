@@ -78,8 +78,8 @@ func TestHashPassword_WithSpecialCharacters(t *testing.T) {
 	passwords := []string{
 		"P@$$w0rd!#%&",
 		"पासवर्ड123", // Unicode
-		"Пароль123",   // Cyrillic
-		"密码123",       // Chinese
+		"Пароль123",  // Cyrillic
+		"密码123",      // Chinese
 		"!@#$%^&*()",
 		"с пробелами",
 	}
@@ -239,7 +239,10 @@ func BenchmarkHashPassword(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		HashPassword(password)
+		_, err := HashPassword(password)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -402,4 +405,3 @@ func TestHashPassword_OutputIsBcrypt(t *testing.T) {
 		t.Fatalf("Hash is not valid bcrypt: %v", err)
 	}
 }
-
