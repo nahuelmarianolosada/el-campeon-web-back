@@ -18,12 +18,12 @@ type CartItem struct {
 }
 
 type Cart struct {
-	ID        uint        `gorm:"primaryKey" json:"id"`
-	UserID    uint        `gorm:"not null;uniqueIndex" json:"user_id"`
-	User      *User       `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
-	Items     []CartItem  `gorm:"foreignKey:CartID" json:"items,omitempty"`
-	CreatedAt time.Time   `json:"created_at"`
-	UpdatedAt time.Time   `json:"updated_at"`
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	UserID    uint           `gorm:"not null;uniqueIndex" json:"user_id"`
+	User      *User          `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
+	Items     []CartItem     `gorm:"foreignKey:CartID" json:"items,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
@@ -37,18 +37,17 @@ type UpdateCartItemRequest struct {
 }
 
 type CartResponse struct {
-	ID       uint              `json:"id"`
-	UserID   uint              `json:"user_id"`
-	Items    []CartItemResponse `json:"items"`
-	Total    float64           `json:"total"`
+	ID     uint               `json:"id"`
+	UserID uint               `json:"user_id"`
+	Items  []CartItemResponse `json:"items"`
+	Total  float64            `json:"total"`
 }
 
 type CartItemResponse struct {
-	ID        uint             `json:"id"`
-	ProductID uint             `json:"product_id"`
-	Product   ProductResponse  `json:"product"`
-	Quantity  int              `json:"quantity"`
-	Price     float64          `json:"price"`
-	Subtotal  float64          `json:"subtotal"` // Quantity * Price
+	ID        uint            `json:"id"`
+	ProductID uint            `json:"product_id"`
+	Product   ProductResponse `json:"product"`
+	Quantity  int             `json:"quantity"`
+	Price     float64         `json:"price"`
+	Subtotal  float64         `json:"subtotal"` // Quantity * Price
 }
-

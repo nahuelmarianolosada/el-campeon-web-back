@@ -41,4 +41,3 @@ func Initialize(cfg *config.Config) (*gorm.DB, error) {
 	log.Println("Database initialized successfully")
 	return db, nil
 }
-

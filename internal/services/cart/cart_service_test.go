@@ -11,15 +11,15 @@ import (
 
 // MockCartRepository
 type MockCartRepository struct {
-	carts          map[uint]*models.Cart
-	items          map[uint]*models.CartItem
-	nextID         uint
-	nextItemID     uint
-	GetCartErr     error
-	AddItemErr     error
-	UpdateItemErr  error
-	RemoveItemErr  error
-	ClearCartErr   error
+	carts         map[uint]*models.Cart
+	items         map[uint]*models.CartItem
+	nextID        uint
+	nextItemID    uint
+	GetCartErr    error
+	AddItemErr    error
+	UpdateItemErr error
+	RemoveItemErr error
+	ClearCartErr  error
 }
 
 func NewMockCartRepository() *MockCartRepository {
@@ -336,8 +336,14 @@ func TestGetCart_Success(t *testing.T) {
 		Price:     50.0,
 		Product:   &models.Product{ID: 2, Name: "Product 2"},
 	}
-	cartRepo.AddItem(1, item1)
-	cartRepo.AddItem(1, item2)
+	errItem1 := cartRepo.AddItem(1, item1)
+	if errItem1 != nil {
+		t.Error("Error adding item1 to cart:", errItem1)
+	}
+	errItem2 := cartRepo.AddItem(1, item2)
+	if errItem2 != nil {
+		t.Error("Error adding item1 to cart:", errItem2)
+	}
 
 	// Obtener carrito
 	resp, err := service.GetCart(1)
@@ -375,7 +381,10 @@ func TestUpdateCartItem_Success(t *testing.T) {
 		Quantity:  5,
 		Price:     100.0,
 	}
-	cartRepo.AddItem(1, item)
+	errAddItem := cartRepo.AddItem(1, item)
+	if errAddItem != nil {
+		t.Error("Error adding item to cart:", errAddItem)
+	}
 
 	// Actualizar cantidad
 	err := service.UpdateCartItem(1, item.ID, 10, false)
@@ -398,7 +407,10 @@ func TestRemoveFromCart_Success(t *testing.T) {
 	// Setup
 	cart, _ := cartRepo.GetOrCreateCart(1)
 	item := &models.CartItem{CartID: cart.ID, ProductID: 1, Quantity: 5}
-	cartRepo.AddItem(1, item)
+	errAddItem := cartRepo.AddItem(1, item)
+	if errAddItem != nil {
+		t.Error("Error adding item to cart:", errAddItem)
+	}
 
 	// Remover
 	err := service.RemoveFromCart(1, item.ID)
@@ -421,7 +433,10 @@ func TestClearCart_Success(t *testing.T) {
 	// Setup
 	cart, _ := cartRepo.GetOrCreateCart(1)
 	item := &models.CartItem{CartID: cart.ID, ProductID: 1, Quantity: 5}
-	cartRepo.AddItem(1, item)
+	errAddItem := cartRepo.AddItem(1, item)
+	if errAddItem != nil {
+		t.Error("Error adding item to cart:", errAddItem)
+	}
 
 	// Limpiar
 	err := service.ClearCart(1)
@@ -445,8 +460,14 @@ func TestCalculateCartTotal_Success(t *testing.T) {
 	cart, _ := cartRepo.GetOrCreateCart(1)
 	item1 := &models.CartItem{CartID: cart.ID, ProductID: 1, Quantity: 2, Price: 100.0}
 	item2 := &models.CartItem{CartID: cart.ID, ProductID: 2, Quantity: 3, Price: 50.0}
-	cartRepo.AddItem(1, item1)
-	cartRepo.AddItem(1, item2)
+	errAddItem1 := cartRepo.AddItem(1, item1)
+	if errAddItem1 != nil {
+		t.Error("Error adding item1 to cart:", errAddItem1)
+	}
+	errAddItem2 := cartRepo.AddItem(1, item2)
+	if errAddItem2 != nil {
+		t.Error("Error adding item2 to cart:", errAddItem2)
+	}
 
 	// Calcular total
 	total, err := service.CalculateCartTotal(1)
@@ -481,7 +502,10 @@ func BenchmarkAddToCart(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		service.AddToCart(uint(i), req, false)
+		err := service.AddToCart(uint(i), req, false)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -500,12 +524,17 @@ func BenchmarkGetCart(b *testing.B) {
 			Quantity:  5,
 			Price:     100.0,
 		}
-		cartRepo.AddItem(1, item)
+		err := cartRepo.AddItem(1, item)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		service.GetCart(1)
+		_, err := service.GetCart(1)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
-
