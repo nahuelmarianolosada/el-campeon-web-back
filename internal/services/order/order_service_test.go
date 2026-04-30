@@ -526,7 +526,10 @@ func TestListAllOrders_Success(t *testing.T) {
 			Tax:         float64(i * 21),
 			Total:       float64(i*100 + i*21),
 		}
-		orderRepo.Create(order)
+		errCreate := orderRepo.Create(order)
+		if errCreate != nil {
+			t.Fatalf("Expected no error, got %v", errCreate)
+		}
 	}
 
 	// Listar todas las órdenes

@@ -460,8 +460,14 @@ func TestCalculateCartTotal_Success(t *testing.T) {
 	cart, _ := cartRepo.GetOrCreateCart(1)
 	item1 := &models.CartItem{CartID: cart.ID, ProductID: 1, Quantity: 2, Price: 100.0}
 	item2 := &models.CartItem{CartID: cart.ID, ProductID: 2, Quantity: 3, Price: 50.0}
-	cartRepo.AddItem(1, item1)
-	cartRepo.AddItem(1, item2)
+	errAddItem1 := cartRepo.AddItem(1, item1)
+	if errAddItem1 != nil {
+		t.Error("Error adding item1 to cart:", errAddItem1)
+	}
+	errAddItem2 := cartRepo.AddItem(1, item2)
+	if errAddItem2 != nil {
+		t.Error("Error adding item2 to cart:", errAddItem2)
+	}
 
 	// Calcular total
 	total, err := service.CalculateCartTotal(1)
@@ -518,7 +524,10 @@ func BenchmarkGetCart(b *testing.B) {
 			Quantity:  5,
 			Price:     100.0,
 		}
-		cartRepo.AddItem(1, item)
+		err := cartRepo.AddItem(1, item)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 
 	b.ResetTimer()
