@@ -407,7 +407,10 @@ func TestRemoveFromCart_Success(t *testing.T) {
 	// Setup
 	cart, _ := cartRepo.GetOrCreateCart(1)
 	item := &models.CartItem{CartID: cart.ID, ProductID: 1, Quantity: 5}
-	cartRepo.AddItem(1, item)
+	errAddItem := cartRepo.AddItem(1, item)
+	if errAddItem != nil {
+		t.Error("Error adding item to cart:", errAddItem)
+	}
 
 	// Remover
 	err := service.RemoveFromCart(1, item.ID)
@@ -430,7 +433,10 @@ func TestClearCart_Success(t *testing.T) {
 	// Setup
 	cart, _ := cartRepo.GetOrCreateCart(1)
 	item := &models.CartItem{CartID: cart.ID, ProductID: 1, Quantity: 5}
-	cartRepo.AddItem(1, item)
+	errAddItem := cartRepo.AddItem(1, item)
+	if errAddItem != nil {
+		t.Error("Error adding item to cart:", errAddItem)
+	}
 
 	// Limpiar
 	err := service.ClearCart(1)

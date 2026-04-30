@@ -466,7 +466,10 @@ func TestUpdateOrderStatus_Success(t *testing.T) {
 		Tax:         21.0,
 		Total:       121.0,
 	}
-	orderRepo.Create(order)
+	err := orderRepo.Create(order)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
 
 	// Actualizar estado
 	resp, err := service.UpdateOrderStatus(order.ID, "CONFIRMED")
@@ -493,7 +496,10 @@ func TestUpdateOrderStatus_InvalidStatus(t *testing.T) {
 		UserID:      1,
 		Status:      "PENDING",
 	}
-	orderRepo.Create(order)
+	errCreate := orderRepo.Create(order)
+	if errCreate != nil {
+		t.Fatalf("Expected no error, got %v", errCreate)
+	}
 
 	// Intentar actualizar a estado inválido
 	_, err := service.UpdateOrderStatus(order.ID, "INVALID_STATUS")
@@ -616,7 +622,10 @@ func BenchmarkCreateOrder(b *testing.B) {
 		}
 		cartRepo.carts[userID] = cart
 
-		service.CreateOrder(userID, req)
+		_, err := service.CreateOrder(userID, req)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
