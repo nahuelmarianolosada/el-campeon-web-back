@@ -85,6 +85,7 @@ func (s *orderService) CreateOrder(userID uint, req *models.CreateOrderRequest) 
 			ProductID: cartItem.ProductID,
 			Quantity:  cartItem.Quantity,
 			Price:     cartItem.Price,
+			Product:   cartItem.Product,
 		}
 		if err := s.orderRepo.AddItem(order.ID, orderItem); err != nil {
 			return nil, fmt.Errorf("error adding item to order: %w", err)

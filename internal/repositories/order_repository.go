@@ -47,7 +47,7 @@ func (r *orderRepository) FindByOrderNumber(orderNumber string) (*models.Order, 
 
 func (r *orderRepository) FindByUserID(userID uint, limit, offset int) ([]models.Order, error) {
 	var orders []models.Order
-	if err := r.db.Where("user_id = ?", userID).Limit(limit).Offset(offset).Preload("Items").Find(&orders).Error; err != nil {
+	if err := r.db.Where("user_id = ?", userID).Limit(limit).Offset(offset).Preload("Items.Product").Find(&orders).Error; err != nil {
 		return nil, err
 	}
 	return orders, nil
@@ -68,7 +68,7 @@ func (r *orderRepository) AddItem(orderID uint, item *models.OrderItem) error {
 
 func (r *orderRepository) FindAll(limit, offset int) ([]models.Order, error) {
 	var orders []models.Order
-	if err := r.db.Limit(limit).Offset(offset).Preload("Items").Find(&orders).Error; err != nil {
+	if err := r.db.Limit(limit).Offset(offset).Preload("Items.Product").Find(&orders).Error; err != nil {
 		return nil, err
 	}
 	return orders, nil
@@ -77,4 +77,3 @@ func (r *orderRepository) FindAll(limit, offset int) ([]models.Order, error) {
 func (r *orderRepository) UpdateStatus(orderID uint, status string) error {
 	return r.db.Model(&models.Order{}).Where("id = ?", orderID).Update("status", status).Error
 }
-
