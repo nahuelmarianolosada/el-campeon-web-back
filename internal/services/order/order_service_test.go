@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/order/status"
 	"gorm.io/gorm"
 )
 
@@ -358,7 +359,7 @@ func TestGetOrderByID_Success(t *testing.T) {
 	order := &models.Order{
 		OrderNumber: "ORD-12345",
 		UserID:      1,
-		Status:      "PENDING",
+		Status:      status.Pending,
 		Subtotal:    100.0,
 		Tax:         21.0,
 		Total:       121.0,
@@ -403,7 +404,7 @@ func TestGetOrdersByUserID_Success(t *testing.T) {
 	order1 := &models.Order{
 		OrderNumber: "ORD-001",
 		UserID:      1,
-		Status:      "PENDING",
+		Status:      status.Pending,
 		Subtotal:    100.0,
 		Tax:         21.0,
 		Total:       121.0,
@@ -411,7 +412,7 @@ func TestGetOrdersByUserID_Success(t *testing.T) {
 	order2 := &models.Order{
 		OrderNumber: "ORD-002",
 		UserID:      1,
-		Status:      "CONFIRMED",
+		Status:      status.Confirmed,
 		Subtotal:    200.0,
 		Tax:         42.0,
 		Total:       242.0,
@@ -419,7 +420,7 @@ func TestGetOrdersByUserID_Success(t *testing.T) {
 	order3 := &models.Order{
 		OrderNumber: "ORD-003",
 		UserID:      2,
-		Status:      "PENDING",
+		Status:      status.Pending,
 		Subtotal:    150.0,
 		Tax:         31.5,
 		Total:       181.5,
@@ -461,7 +462,7 @@ func TestUpdateOrderStatus_Success(t *testing.T) {
 	order := &models.Order{
 		OrderNumber: "ORD-001",
 		UserID:      1,
-		Status:      "PENDING",
+		Status:      status.Pending,
 		Subtotal:    100.0,
 		Tax:         21.0,
 		Total:       121.0,
@@ -472,13 +473,13 @@ func TestUpdateOrderStatus_Success(t *testing.T) {
 	}
 
 	// Actualizar estado
-	resp, err := service.UpdateOrderStatus(order.ID, "CONFIRMED")
+	resp, err := service.UpdateOrderStatus(order.ID, status.Confirmed)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	if resp.Status != "CONFIRMED" {
+	if resp.Status != status.Confirmed {
 		t.Fatalf("Expected status CONFIRMED, got %s", resp.Status)
 	}
 }
@@ -494,7 +495,7 @@ func TestUpdateOrderStatus_InvalidStatus(t *testing.T) {
 	order := &models.Order{
 		OrderNumber: "ORD-001",
 		UserID:      1,
-		Status:      "PENDING",
+		Status:      status.Pending,
 	}
 	errCreate := orderRepo.Create(order)
 	if errCreate != nil {
@@ -521,7 +522,7 @@ func TestListAllOrders_Success(t *testing.T) {
 		order := &models.Order{
 			OrderNumber: "ORD-" + string(rune(i)),
 			UserID:      uint(i % 2),
-			Status:      "PENDING",
+			Status:      status.Pending,
 			Subtotal:    float64(i * 100),
 			Tax:         float64(i * 21),
 			Total:       float64(i*100 + i*21),
@@ -644,7 +645,7 @@ func BenchmarkGetOrderByID(b *testing.B) {
 		order := &models.Order{
 			OrderNumber: "ORD-" + string(rune(i)),
 			UserID:      1,
-			Status:      "PENDING",
+			Status:      status.Pending,
 			Subtotal:    100.0,
 			Tax:         21.0,
 			Total:       121.0,

@@ -7,6 +7,7 @@ import (
 
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/repositories"
+	orderStatusService "github.com/nahuelmarianolosada/el-campeon-web/internal/services/order/status"
 )
 
 type OrderService interface {
@@ -66,7 +67,7 @@ func (s *orderService) CreateOrder(userID uint, req *models.CreateOrderRequest) 
 	order := &models.Order{
 		OrderNumber:     s.generateOrderNumber(),
 		UserID:          userID,
-		Status:          "PENDING",
+		Status:          orderStatusService.Pending,
 		Subtotal:        subtotal,
 		Tax:             tax,
 		Total:           total,
@@ -124,17 +125,13 @@ func (s *orderService) GetOrdersByUserID(userID uint, limit, offset int) ([]mode
 }
 
 func (s *orderService) UpdateOrderStatus(orderID uint, status string) (*models.OrderResponse, error) {
-	// Validar que el estado sea válido
-	validStatuses := map[string]bool{
-		"PENDING":   true,
-		"CONFIRMED": true,
-		"SHIPPED":   true,
-		"DELIVERED": true,
-		"CANCELLED": true,
+	order, err := s.GetOrderByID(orderID)
+	if err != nil {
+		return nil, fmt.Errorf("error finding order: %w", err)
 	}
 
-	if !validStatuses[status] {
-		return nil, fmt.Errorf("invalid order status: %s", status)
+	if !orderStatusService.IsValidTransition(order.Status, status) {
+		return nil, fmt.Errorf("invalid order status transition: %s -> %s", order.Status, status)
 	}
 
 	if err := s.orderRepo.UpdateStatus(orderID, status); err != nil {
