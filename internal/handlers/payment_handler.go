@@ -30,6 +30,7 @@ func NewPaymentHandler(paymentService payment.PaymentService) *PaymentHandler {
 // @Failure 400 {object} gin.H
 // @Router /api/payments [post]
 func (h *PaymentHandler) CreatePayment(c *gin.Context) {
+	ctx := c.Request.Context()
 	_, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
@@ -45,7 +46,7 @@ func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 	// Verificar que el usuario es propietario de la orden
 	// En una implementación completa, consultaríamos la orden
 
-	payment, err := h.paymentService.CreatePayment(&req)
+	payment, err := h.paymentService.CreatePayment(ctx, &req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

@@ -1,16 +1,32 @@
 package payment
 
 import (
+	"context"
 	"errors"
 	"testing"
 
+	"github.com/mercadopago/sdk-go/pkg/preference"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/config"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
+	orderStatus "github.com/nahuelmarianolosada/el-campeon-web/internal/services/order/status"
+	paymentStatus "github.com/nahuelmarianolosada/el-campeon-web/internal/services/payment/status"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
 // Mocks
+
+type MockMercadopagoClient struct {
+	mock.Mock
+}
+
+func (m *MockMercadopagoClient) CreatePreference(ctx context.Context, req preference.Request) (*preference.Response, error) {
+	args := m.Called(ctx, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*preference.Response), args.Error(1)
+}
 
 type MockPaymentRepository struct {
 	mock.Mock
@@ -137,8 +153,10 @@ func (m *MockOrderRepository) UpdateStatus(orderID uint, status string) error {
 func TestCreatePayment(t *testing.T) {
 	paymentRepo := new(MockPaymentRepository)
 	orderRepo := new(MockOrderRepository)
+	mpClient := new(MockMercadopagoClient)
 	cfg := &config.Config{}
-	service := NewPaymentService(paymentRepo, orderRepo, cfg)
+	service := NewPaymentServiceWithClient(paymentRepo, orderRepo, cfg, mpClient)
+	ctx := context.Background()
 
 	req := &models.CreatePaymentRequest{
 		OrderID: 1,
@@ -149,29 +167,57 @@ func TestCreatePayment(t *testing.T) {
 		ID:     1,
 		UserID: 1,
 		Total:  100.0,
-		Status: "PENDING",
+		Status: orderStatus.Pending,
+		Items: []models.OrderItem{
+			{
+				ID:       1,
+				Quantity: 1,
+				Price:    100.0,
+				Product: &models.Product{
+					Name: "Test Product",
+				},
+			},
+		},
 	}
 
 	t.Run("Success", func(t *testing.T) {
 		orderRepo.On("FindByID", uint(1)).Return(order, nil).Once()
-		paymentRepo.On("Create", mock.AnythingOfType("*models.Payment")).Return(nil).Once()
 
-		resp, err := service.CreatePayment(req)
+		// Setup the mock Mercadopago client to return a successful preference
+		mockPreference := &preference.Response{
+			ID: "preference-123",
+			Items: []preference.ItemResponse{
+				{
+					ID:        "1",
+					Title:     "Test Product",
+					Quantity:  1,
+					UnitPrice: 100.0,
+				},
+			},
+		}
+		mpClient.On("CreatePreference", mock.Anything, mock.Anything).Return(mockPreference, nil).Once()
+
+		paymentRepo.On("Create", mock.AnythingOfType("*models.Payment")).Return(nil).Once()
+		paymentRepo.On("Update", mock.AnythingOfType("*models.Payment")).Return(nil).Once()
+
+		resp, err := service.CreatePayment(ctx, req)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
 		assert.Equal(t, req.OrderID, resp.OrderID)
 		assert.Equal(t, order.UserID, resp.UserID)
 		assert.Equal(t, req.Amount, resp.Amount)
-		assert.Equal(t, "PENDING", resp.Status)
+		assert.Equal(t, paymentStatus.Approved, resp.Status)
+		assert.Equal(t, "preference-123", resp.MercadopagoPreferenceID)
 		paymentRepo.AssertExpectations(t)
 		orderRepo.AssertExpectations(t)
+		mpClient.AssertExpectations(t)
 	})
 
 	t.Run("OrderNotFound", func(t *testing.T) {
 		orderRepo.On("FindByID", uint(1)).Return(nil, errors.New("not found")).Once()
 
-		resp, err := service.CreatePayment(req)
+		resp, err := service.CreatePayment(ctx, req)
 
 		assert.Error(t, err)
 		assert.Nil(t, resp)
@@ -183,7 +229,7 @@ func TestCreatePayment(t *testing.T) {
 		cancelledOrder := &models.Order{ID: 1, Status: "CANCELLED"}
 		orderRepo.On("FindByID", uint(1)).Return(cancelledOrder, nil).Once()
 
-		resp, err := service.CreatePayment(req)
+		resp, err := service.CreatePayment(ctx, req)
 
 		assert.Error(t, err)
 		assert.Nil(t, resp)
@@ -195,7 +241,7 @@ func TestCreatePayment(t *testing.T) {
 		orderRepo.On("FindByID", uint(1)).Return(order, nil).Once()
 		reqMismatch := &models.CreatePaymentRequest{OrderID: 1, Amount: 50.0}
 
-		resp, err := service.CreatePayment(reqMismatch)
+		resp, err := service.CreatePayment(ctx, reqMismatch)
 
 		assert.Error(t, err)
 		assert.Nil(t, resp)
@@ -207,7 +253,7 @@ func TestCreatePayment(t *testing.T) {
 		orderRepo.On("FindByID", uint(1)).Return(order, nil).Once()
 		paymentRepo.On("Create", mock.AnythingOfType("*models.Payment")).Return(errors.New("db error")).Once()
 
-		resp, err := service.CreatePayment(req)
+		resp, err := service.CreatePayment(ctx, req)
 
 		assert.Error(t, err)
 		assert.Nil(t, resp)
@@ -327,7 +373,8 @@ func TestUpdatePaymentStatus(t *testing.T) {
 	})
 
 	t.Run("RejectSuccess", func(t *testing.T) {
-		paymentRepo.On("FindByID", uint(1)).Return(payment, nil).Once()
+		freshPayment := &models.Payment{ID: 1, OrderID: 10, Status: "PENDING"}
+		paymentRepo.On("FindByID", uint(1)).Return(freshPayment, nil).Once()
 		paymentRepo.On("Update", mock.AnythingOfType("*models.Payment")).Return(nil).Run(func(args mock.Arguments) {
 			p := args.Get(0).(*models.Payment)
 			assert.Equal(t, "REJECTED", p.Status)
@@ -341,45 +388,63 @@ func TestUpdatePaymentStatus(t *testing.T) {
 	})
 
 	t.Run("InvalidStatus", func(t *testing.T) {
-		resp, err := service.UpdatePaymentStatus(1, "INVALID")
+		freshRepo := new(MockPaymentRepository)
+		freshOrderRepo := new(MockOrderRepository)
+		freshService := NewPaymentService(freshRepo, freshOrderRepo, nil)
+		invalidPayment := &models.Payment{ID: 1, OrderID: 10, Status: "PENDING"}
+		freshRepo.On("FindByID", uint(1)).Return(invalidPayment, nil).Once()
+
+		resp, err := freshService.UpdatePaymentStatus(1, "INVALID")
 
 		assert.Error(t, err)
 		assert.Nil(t, resp)
-		assert.Contains(t, err.Error(), "invalid payment status")
+		assert.Contains(t, err.Error(), "invalid payment status transition")
+		freshRepo.AssertExpectations(t)
 	})
 
 	t.Run("PaymentNotFound", func(t *testing.T) {
-		paymentRepo.On("FindByID", uint(1)).Return(nil, errors.New("not found")).Once()
+		freshRepo := new(MockPaymentRepository)
+		freshOrderRepo := new(MockOrderRepository)
+		freshService := NewPaymentService(freshRepo, freshOrderRepo, nil)
+		freshRepo.On("FindByID", uint(1)).Return(nil, errors.New("not found")).Once()
 
-		resp, err := service.UpdatePaymentStatus(1, "APPROVED")
+		resp, err := freshService.UpdatePaymentStatus(1, "APPROVED")
 
 		assert.Error(t, err)
 		assert.Nil(t, resp)
-		paymentRepo.AssertExpectations(t)
+		freshRepo.AssertExpectations(t)
 	})
 
 	t.Run("OrderUpdateError", func(t *testing.T) {
-		paymentRepo.On("FindByID", uint(1)).Return(payment, nil).Once()
-		orderRepo.On("UpdateStatus", uint(10), "CONFIRMED").Return(errors.New("db error")).Once()
+		freshRepo := new(MockPaymentRepository)
+		freshOrderRepo := new(MockOrderRepository)
+		freshService := NewPaymentService(freshRepo, freshOrderRepo, nil)
+		errorPayment := &models.Payment{ID: 1, OrderID: 10, Status: "PENDING"}
+		freshRepo.On("FindByID", uint(1)).Return(errorPayment, nil).Once()
+		freshOrderRepo.On("UpdateStatus", uint(10), "CONFIRMED").Return(errors.New("db error")).Once()
 
-		resp, err := service.UpdatePaymentStatus(1, "APPROVED")
+		resp, err := freshService.UpdatePaymentStatus(1, "APPROVED")
 
 		assert.Error(t, err)
 		assert.Nil(t, resp)
 		assert.Contains(t, err.Error(), "error updating order status")
-		orderRepo.AssertExpectations(t)
+		freshOrderRepo.AssertExpectations(t)
 	})
 
 	t.Run("PaymentUpdateError", func(t *testing.T) {
-		paymentRepo.On("FindByID", uint(1)).Return(payment, nil).Once()
-		paymentRepo.On("Update", mock.AnythingOfType("*models.Payment")).Return(errors.New("db error")).Once()
+		freshRepo := new(MockPaymentRepository)
+		freshOrderRepo := new(MockOrderRepository)
+		freshService := NewPaymentService(freshRepo, freshOrderRepo, nil)
+		errorPayment := &models.Payment{ID: 1, OrderID: 10, Status: "PENDING"}
+		freshRepo.On("FindByID", uint(1)).Return(errorPayment, nil).Once()
+		freshRepo.On("Update", mock.AnythingOfType("*models.Payment")).Return(errors.New("db error")).Once()
 
-		resp, err := service.UpdatePaymentStatus(1, "REJECTED")
+		resp, err := freshService.UpdatePaymentStatus(1, "REJECTED")
 
 		assert.Error(t, err)
 		assert.Nil(t, resp)
 		assert.Contains(t, err.Error(), "error updating payment")
-		paymentRepo.AssertExpectations(t)
+		freshRepo.AssertExpectations(t)
 	})
 }
 
