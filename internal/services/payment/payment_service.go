@@ -1,16 +1,23 @@
 package payment
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/nahuelmarianolosada/el-campeon-web/internal/config"
+	"github.com/mercadopago/sdk-go/pkg/config"
+	"github.com/mercadopago/sdk-go/pkg/preference"
+	internalConfig "github.com/nahuelmarianolosada/el-campeon-web/internal/config"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/repositories"
+	orderStatus "github.com/nahuelmarianolosada/el-campeon-web/internal/services/order/status"
+	paymentStatus "github.com/nahuelmarianolosada/el-campeon-web/internal/services/payment/status"
+	"gorm.io/datatypes"
 )
 
 type PaymentService interface {
-	CreatePayment(req *models.CreatePaymentRequest) (*models.PaymentResponse, error)
+	CreatePayment(ctx context.Context, req *models.CreatePaymentRequest) (*models.PaymentResponse, error)
 	GetPaymentByID(id uint) (*models.PaymentResponse, error)
 	GetPaymentsByUserID(userID uint, limit, offset int) ([]models.PaymentResponse, error)
 	GetPaymentByOrderID(orderID uint) (*models.PaymentResponse, error)
@@ -20,24 +27,44 @@ type PaymentService interface {
 }
 
 type paymentService struct {
-	paymentRepo repositories.PaymentRepository
-	orderRepo   repositories.OrderRepository
-	config      *config.Config
+	paymentRepo       repositories.PaymentRepository
+	orderRepo         repositories.OrderRepository
+	config            *internalConfig.Config
+	mercadopagoClient MercadopagoClient
 }
 
 func NewPaymentService(
 	paymentRepo repositories.PaymentRepository,
 	orderRepo repositories.OrderRepository,
-	cfg *config.Config,
+	cfg *internalConfig.Config,
 ) PaymentService {
 	return &paymentService{
-		paymentRepo: paymentRepo,
-		orderRepo:   orderRepo,
-		config:      cfg,
+		paymentRepo:       paymentRepo,
+		orderRepo:         orderRepo,
+		config:            cfg,
+		mercadopagoClient: nil, // Will be set via SetMercadopagoClient or use default
 	}
 }
 
-func (s *paymentService) CreatePayment(req *models.CreatePaymentRequest) (*models.PaymentResponse, error) {
+func NewPaymentServiceWithClient(
+	paymentRepo repositories.PaymentRepository,
+	orderRepo repositories.OrderRepository,
+	cfg *internalConfig.Config,
+	client MercadopagoClient,
+) PaymentService {
+	return &paymentService{
+		paymentRepo:       paymentRepo,
+		orderRepo:         orderRepo,
+		config:            cfg,
+		mercadopagoClient: client,
+	}
+}
+
+func (s *paymentService) SetMercadopagoClient(client MercadopagoClient) {
+	s.mercadopagoClient = client
+}
+
+func (s *paymentService) CreatePayment(ctx context.Context, req *models.CreatePaymentRequest) (*models.PaymentResponse, error) {
 	// Obtener la orden
 	order, err := s.orderRepo.FindByID(req.OrderID)
 	if err != nil {
@@ -45,7 +72,7 @@ func (s *paymentService) CreatePayment(req *models.CreatePaymentRequest) (*model
 	}
 
 	// Validar que la orden no esté cancelada
-	if order.Status == "CANCELLED" {
+	if order.Status == orderStatus.Cancelled {
 		return nil, fmt.Errorf("cannot create payment for cancelled order")
 	}
 
@@ -54,24 +81,86 @@ func (s *paymentService) CreatePayment(req *models.CreatePaymentRequest) (*model
 		return nil, fmt.Errorf("payment amount does not match order total. expected: %.2f, got: %.2f", order.Total, req.Amount)
 	}
 
+	totalQuantity := 0
+	for _, item := range order.Items {
+		totalQuantity += item.Quantity
+	}
+
 	// Crear pago
 	transactionID := s.generateTransactionID()
 	payment := &models.Payment{
-		TransactionID:           transactionID,
-		OrderID:                 req.OrderID,
-		UserID:                  order.UserID,
-		Amount:                  req.Amount,
-		Currency:                "ARS",
-		Status:                  "PENDING",
-		PaymentMethod:           "MERCADOPAGO",
-		MercadopagoPreferenceID: "", // Se generará al integrar con MP SDK
+		TransactionID: transactionID,
+		OrderID:       req.OrderID,
+		UserID:        order.UserID,
+		Amount:        req.Amount,
+		Currency:      "ARS",
+		Status:        paymentStatus.Pending,
+		PaymentMethod: "MERCADOPAGO",
 	}
 
 	if err := s.paymentRepo.Create(payment); err != nil {
 		return nil, fmt.Errorf("error creating payment: %w", err)
 	}
 
+	executedPayment, err := s.ExecutePayment(ctx, *order)
+	if err != nil {
+		return nil, fmt.Errorf("error executing payment: %w", err)
+	}
+
+	executedPaymentByte, err := json.Marshal(executedPayment)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling executed payment: %w", err)
+	}
+
+	payment.MercadopagoPreferenceID = executedPayment.ID
+	payment.MercadopagoData = datatypes.JSONMap{
+		"preference": string(executedPaymentByte),
+	}
+	payment.Status = paymentStatus.Approved
+
+	if err := s.paymentRepo.Update(payment); err != nil {
+		return nil, fmt.Errorf("error updating payment with MP data: %w", err)
+	}
+
 	return s.toPaymentResponse(payment), nil
+}
+
+func (s *paymentService) ExecutePayment(ctx context.Context, order models.Order) (*preference.Response, error) {
+	// If no client is set, create a default one
+	if s.mercadopagoClient == nil {
+		cfg, err := config.New(s.config.MercadopagoAccessToken)
+		if err != nil {
+			return nil, fmt.Errorf("mp config error: %w", err)
+		}
+		client := preference.NewClient(cfg)
+		s.mercadopagoClient = NewDefaultMercadopagoClient(client)
+	}
+
+	var itemsRequest []preference.ItemRequest
+	for _, item := range order.Items {
+		itemsRequest = append(itemsRequest, preference.ItemRequest{
+			ID:         fmt.Sprintf("%d", item.ID),
+			Title:      item.Product.Name,
+			Quantity:   item.Quantity,
+			UnitPrice:  item.Price,
+			CurrencyID: "ARS",
+		})
+	}
+
+	// Build the Preference Request
+	prefReq := preference.Request{
+		Items:             itemsRequest,
+		ExternalReference: fmt.Sprintf("%d", order.ID),
+		NotificationURL:   s.config.APIBaseURL + "/webhooks/mercadopago",
+	}
+
+	// Create the preference in MP using the injected client
+	result, err := s.mercadopagoClient.CreatePreference(ctx, prefReq)
+	if err != nil {
+		return nil, fmt.Errorf("mercadopago api error: %w", err)
+	}
+
+	return result, nil
 }
 
 func (s *paymentService) GetPaymentByID(id uint) (*models.PaymentResponse, error) {
@@ -107,42 +196,33 @@ func (s *paymentService) GetPaymentByOrderID(orderID uint) (*models.PaymentRespo
 }
 
 func (s *paymentService) UpdatePaymentStatus(paymentID uint, status string) (*models.PaymentResponse, error) {
-	// Validar estado
-	validStatuses := map[string]bool{
-		"PENDING":   true,
-		"APPROVED":  true,
-		"REJECTED":  true,
-		"CANCELLED": true,
-		"REFUNDED":  true,
-	}
-
-	if !validStatuses[status] {
-		return nil, fmt.Errorf("invalid payment status: %s", status)
-	}
-
-	payment, err := s.paymentRepo.FindByID(paymentID)
+	currentPayment, err := s.paymentRepo.FindByID(paymentID)
 	if err != nil {
 		return nil, fmt.Errorf("error finding payment: %w", err)
 	}
 
-	payment.Status = status
+	if !paymentStatus.IsValidTransition(currentPayment.Status, status) {
+		return nil, fmt.Errorf("invalid payment status transition from %s to %s", currentPayment.Status, status)
+	}
+
+	currentPayment.Status = status
 
 	// Si el pago fue aprobado, actualizar estado de orden
-	if status == "APPROVED" {
+	if status == paymentStatus.Approved {
 		now := time.Now()
-		payment.ApprovedAt = &now
+		currentPayment.ApprovedAt = &now
 
 		// Actualizar orden a CONFIRMED
-		if err := s.orderRepo.UpdateStatus(payment.OrderID, "CONFIRMED"); err != nil {
+		if err := s.orderRepo.UpdateStatus(currentPayment.OrderID, orderStatus.Confirmed); err != nil {
 			return nil, fmt.Errorf("error updating order status: %w", err)
 		}
 	}
 
-	if err := s.paymentRepo.Update(payment); err != nil {
+	if err := s.paymentRepo.Update(currentPayment); err != nil {
 		return nil, fmt.Errorf("error updating payment: %w", err)
 	}
 
-	return s.toPaymentResponse(payment), nil
+	return s.toPaymentResponse(currentPayment), nil
 }
 
 // ProcessMercadopagoWebhook procesa webhooks de MercadoPago
