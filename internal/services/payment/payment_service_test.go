@@ -9,6 +9,7 @@ import (
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/config"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
 	orderStatus "github.com/nahuelmarianolosada/el-campeon-web/internal/services/order/status"
+	paymentStatus "github.com/nahuelmarianolosada/el-campeon-web/internal/services/payment/status"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -206,7 +207,7 @@ func TestCreatePayment(t *testing.T) {
 		assert.Equal(t, req.OrderID, resp.OrderID)
 		assert.Equal(t, order.UserID, resp.UserID)
 		assert.Equal(t, req.Amount, resp.Amount)
-		assert.Equal(t, "PENDING", resp.Status)
+		assert.Equal(t, paymentStatus.Approved, resp.Status)
 		assert.Equal(t, "preference-123", resp.MercadopagoPreferenceID)
 		paymentRepo.AssertExpectations(t)
 		orderRepo.AssertExpectations(t)
