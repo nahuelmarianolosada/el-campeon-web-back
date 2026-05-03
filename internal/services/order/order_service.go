@@ -19,20 +19,23 @@ type OrderService interface {
 }
 
 type orderService struct {
-	orderRepo repositories.OrderRepository
-	cartRepo  repositories.CartRepository
-	userRepo  repositories.UserRepository
+	orderRepo   repositories.OrderRepository
+	cartRepo    repositories.CartRepository
+	userRepo    repositories.UserRepository
+	paymentRepo repositories.PaymentRepository
 }
 
 func NewOrderService(
 	orderRepo repositories.OrderRepository,
 	cartRepo repositories.CartRepository,
 	userRepo repositories.UserRepository,
+	paymentRepo repositories.PaymentRepository,
 ) OrderService {
 	return &orderService{
-		orderRepo: orderRepo,
-		cartRepo:  cartRepo,
-		userRepo:  userRepo,
+		orderRepo:   orderRepo,
+		cartRepo:    cartRepo,
+		userRepo:    userRepo,
+		paymentRepo: paymentRepo,
 	}
 }
 

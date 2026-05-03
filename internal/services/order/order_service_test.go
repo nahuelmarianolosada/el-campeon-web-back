@@ -5,6 +5,7 @@ import (
 
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/order/status"
+	"github.com/stretchr/testify/mock"
 	"gorm.io/gorm"
 )
 
@@ -60,7 +61,7 @@ func (m *MockOrderRepository) FindByOrderNumber(orderNumber string) (*models.Ord
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (m *MockOrderRepository) FindByUserID(userID uint, limit, offset int) ([]models.Order, error) {
+func (m *MockOrderRepository) FindByUserID(userID uint, _, _ int) ([]models.Order, error) {
 	if m.FindByUserIDErr != nil {
 		return nil, m.FindByUserIDErr
 	}
@@ -74,7 +75,7 @@ func (m *MockOrderRepository) FindByUserID(userID uint, limit, offset int) ([]mo
 	return orders, nil
 }
 
-func (m *MockOrderRepository) FindAll(limit, offset int) ([]models.Order, error) {
+func (m *MockOrderRepository) FindAll(_, _ int) ([]models.Order, error) {
 	if m.FindAllErr != nil {
 		return nil, m.FindAllErr
 	}
@@ -148,15 +149,15 @@ func (m *MockOrderCartRepository) GetOrCreateCart(userID uint) (*models.Cart, er
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (m *MockOrderCartRepository) AddItem(userID uint, item *models.CartItem) error {
+func (m *MockOrderCartRepository) AddItem(_ uint, _ *models.CartItem) error {
 	return nil
 }
 
-func (m *MockOrderCartRepository) UpdateItem(itemID uint, quantity int) error {
+func (m *MockOrderCartRepository) UpdateItem(_ uint, _ int) error {
 	return nil
 }
 
-func (m *MockOrderCartRepository) RemoveItem(itemID uint) error {
+func (m *MockOrderCartRepository) RemoveItem(_ uint) error {
 	return nil
 }
 
@@ -191,24 +192,83 @@ func (m *MockOrderUserRepository) FindByID(id uint) (*models.User, error) {
 	return &models.User{ID: id}, nil
 }
 
-func (m *MockOrderUserRepository) FindByEmail(email string) (*models.User, error) {
+func (m *MockOrderUserRepository) FindByEmail(_ string) (*models.User, error) {
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (m *MockOrderUserRepository) Create(user *models.User) error {
+func (m *MockOrderUserRepository) Create(_ *models.User) error {
 	return nil
 }
 
-func (m *MockOrderUserRepository) Update(user *models.User) error {
+func (m *MockOrderUserRepository) Update(_ *models.User) error {
 	return nil
 }
 
-func (m *MockOrderUserRepository) Delete(id uint) error {
+func (m *MockOrderUserRepository) Delete(_ uint) error {
 	return nil
 }
 
-func (m *MockOrderUserRepository) FindAll(limit, offset int) ([]models.User, error) {
+func (m *MockOrderUserRepository) FindAll(_, _ int) ([]models.User, error) {
 	return []models.User{}, nil
+}
+
+type MockPaymentRepository struct {
+	mock.Mock
+}
+
+func (m *MockPaymentRepository) Create(payment *models.Payment) error {
+	args := m.Called(payment)
+	return args.Error(0)
+}
+
+func (m *MockPaymentRepository) FindByID(id uint) (*models.Payment, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Payment), args.Error(1)
+}
+
+func (m *MockPaymentRepository) FindByTransactionID(transactionID string) (*models.Payment, error) {
+	args := m.Called(transactionID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Payment), args.Error(1)
+}
+
+func (m *MockPaymentRepository) FindByOrderID(orderID uint) (*models.Payment, error) {
+	args := m.Called(orderID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Payment), args.Error(1)
+}
+
+func (m *MockPaymentRepository) Update(payment *models.Payment) error {
+	args := m.Called(payment)
+	return args.Error(0)
+}
+
+func (m *MockPaymentRepository) FindByUserID(userID uint, limit, offset int) ([]models.Payment, error) {
+	args := m.Called(userID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.Payment), args.Error(1)
+}
+
+func (m *MockPaymentRepository) ListAll(limit, offset int) ([]models.Payment, error) {
+	args := m.Called(limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.Payment), args.Error(1)
+}
+
+func (m *MockPaymentRepository) UpdateStatus(paymentID uint, status string) error {
+	args := m.Called(paymentID, status)
+	return args.Error(0)
 }
 
 // ============ Tests ============
@@ -217,8 +277,9 @@ func TestCreateOrder_Success(t *testing.T) {
 	orderRepo := NewMockOrderRepository()
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
+	paymentRepo := &MockPaymentRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 
 	// Setup: Crear carrito con items
 	cart := &models.Cart{
@@ -281,8 +342,9 @@ func TestCreateOrder_EmptyCart(t *testing.T) {
 	orderRepo := NewMockOrderRepository()
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
+	paymentRepo := &MockPaymentRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 
 	// Setup: Carrito vacío
 	cart := &models.Cart{
@@ -308,8 +370,9 @@ func TestCreateOrder_CalculatesTax(t *testing.T) {
 	orderRepo := NewMockOrderRepository()
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
+	paymentRepo := &MockPaymentRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 
 	// Setup: Crear carrito
 	cart := &models.Cart{
@@ -352,8 +415,9 @@ func TestGetOrderByID_Success(t *testing.T) {
 	orderRepo := NewMockOrderRepository()
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
+	paymentRepo := &MockPaymentRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 
 	// Setup: Crear orden
 	order := &models.Order{
@@ -397,8 +461,9 @@ func TestGetOrdersByUserID_Success(t *testing.T) {
 	orderRepo := NewMockOrderRepository()
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
+	paymentRepo := &MockPaymentRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 
 	// Setup: Crear múltiples órdenes para el mismo usuario
 	order1 := &models.Order{
@@ -455,8 +520,9 @@ func TestUpdateOrderStatus_Success(t *testing.T) {
 	orderRepo := NewMockOrderRepository()
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
+	paymentRepo := &MockPaymentRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 
 	// Setup: Crear orden
 	order := &models.Order{
@@ -471,6 +537,9 @@ func TestUpdateOrderStatus_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
+
+	// Mock the payment repo call
+	paymentRepo.On("FindByOrderID", order.ID).Return(nil, nil)
 
 	// Actualizar estado
 	resp, err := service.UpdateOrderStatus(order.ID, status.Confirmed)
@@ -488,8 +557,9 @@ func TestUpdateOrderStatus_InvalidStatus(t *testing.T) {
 	orderRepo := NewMockOrderRepository()
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
+	paymentRepo := &MockPaymentRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 
 	// Setup: Crear orden
 	order := &models.Order{
@@ -514,8 +584,9 @@ func TestListAllOrders_Success(t *testing.T) {
 	orderRepo := NewMockOrderRepository()
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
+	paymentRepo := &MockPaymentRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 
 	// Setup: Crear múltiples órdenes
 	for i := 1; i <= 5; i++ {
@@ -549,8 +620,9 @@ func TestGenerateOrderNumber_Unique(t *testing.T) {
 	orderRepo := NewMockOrderRepository()
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
+	paymentRepo := &MockPaymentRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 
 	// Setup: Crear carrito
 	cart := &models.Cart{
@@ -599,8 +671,9 @@ func BenchmarkCreateOrder(b *testing.B) {
 	orderRepo := NewMockOrderRepository()
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
+	paymentRepo := &MockPaymentRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 
 	req := &models.CreateOrderRequest{
 		ShippingAddress: map[string]interface{}{
@@ -637,8 +710,9 @@ func BenchmarkGetOrderByID(b *testing.B) {
 	orderRepo := NewMockOrderRepository()
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
+	paymentRepo := &MockPaymentRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 
 	// Setup: Crear órdenes
 	for i := 1; i <= 100; i++ {

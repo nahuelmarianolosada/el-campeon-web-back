@@ -25,7 +25,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	userService := user.NewUserService(userRepo, cfg)
 	productService := product.NewProductService(productRepo)
 	cartService := cart.NewCartService(cartRepo, productRepo)
-	orderService := order.NewOrderService(orderRepo, cartRepo, userRepo)
+	orderService := order.NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 	paymentService := payment.NewPaymentService(paymentRepo, orderRepo, cfg)
 
 	// Inicializar handlers

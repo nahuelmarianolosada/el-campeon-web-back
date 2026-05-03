@@ -31,7 +31,10 @@ func (r *orderRepository) Create(order *models.Order) error {
 
 func (r *orderRepository) FindByID(id uint) (*models.Order, error) {
 	var order models.Order
-	if err := r.db.Preload("Items").Preload("Items.Product").First(&order, id).Error; err != nil {
+	if err := r.db.Preload("Items").
+		Preload("Items.Product").
+		Preload("User").
+		First(&order, id).Error; err != nil {
 		return nil, err
 	}
 	return &order, nil

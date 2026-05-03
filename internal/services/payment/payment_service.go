@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/mercadopago/sdk-go/pkg/config"
-	"github.com/mercadopago/sdk-go/pkg/preference"
+	orderMp "github.com/mercadopago/sdk-go/pkg/order"
 	internalConfig "github.com/nahuelmarianolosada/el-campeon-web/internal/config"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/repositories"
@@ -81,11 +81,6 @@ func (s *paymentService) CreatePayment(ctx context.Context, req *models.CreatePa
 		return nil, fmt.Errorf("payment amount does not match order total. expected: %.2f, got: %.2f", order.Total, req.Amount)
 	}
 
-	totalQuantity := 0
-	for _, item := range order.Items {
-		totalQuantity += item.Quantity
-	}
-
 	// Crear pago
 	transactionID := s.generateTransactionID()
 	payment := &models.Payment{
@@ -122,45 +117,64 @@ func (s *paymentService) CreatePayment(ctx context.Context, req *models.CreatePa
 		return nil, fmt.Errorf("error updating payment with MP data: %w", err)
 	}
 
+	order.Status = orderStatus.Confirmed
+	order.UpdatedAt = time.Now()
+	if err := s.orderRepo.Update(order); err != nil {
+		return nil, fmt.Errorf("error updating order status: %w", err)
+	}
+
 	return s.toPaymentResponse(payment), nil
 }
 
-func (s *paymentService) ExecutePayment(ctx context.Context, order models.Order) (*preference.Response, error) {
+func (s *paymentService) ExecutePayment(ctx context.Context, order models.Order) (*orderMp.Response, error) {
 	// If no client is set, create a default one
 	if s.mercadopagoClient == nil {
 		cfg, err := config.New(s.config.MercadopagoAccessToken)
 		if err != nil {
 			return nil, fmt.Errorf("mp config error: %w", err)
 		}
-		client := preference.NewClient(cfg)
+		client := orderMp.NewClient(cfg)
 		s.mercadopagoClient = NewDefaultMercadopagoClient(client)
 	}
 
-	var itemsRequest []preference.ItemRequest
+	var items []orderMp.ItemsRequest
 	for _, item := range order.Items {
-		itemsRequest = append(itemsRequest, preference.ItemRequest{
-			ID:         fmt.Sprintf("%d", item.ID),
-			Title:      item.Product.Name,
-			Quantity:   item.Quantity,
-			UnitPrice:  item.Price,
-			CurrencyID: "ARS",
+		items = append(items, orderMp.ItemsRequest{
+			Title:       item.Product.Name,
+			Quantity:    item.Quantity,
+			UnitPrice:   fmt.Sprintf("%.2f", item.Price),
+			Description: item.Product.Description,
 		})
 	}
 
-	// Build the Preference Request
-	prefReq := preference.Request{
-		Items:             itemsRequest,
-		ExternalReference: fmt.Sprintf("%d", order.ID),
-		NotificationURL:   s.config.APIBaseURL + "/webhooks/mercadopago",
+	request := orderMp.Request{
+		Type:              "online",
+		TotalAmount:       fmt.Sprintf("%.2f", order.Total),
+		ExternalReference: order.OrderNumber,
+		Currency:          "ARS",
+		Items:             items,
+		Transactions: &orderMp.TransactionRequest{
+			Payments: []orderMp.PaymentRequest{
+				{
+					Amount: fmt.Sprintf("%.2f", order.Total),
+				},
+			},
+		},
+		Payer: &orderMp.PayerRequest{
+			Email:      order.User.Email,
+			FirstName:  order.User.FirstName,
+			LastName:   order.User.LastName,
+			CustomerID: fmt.Sprintf("%d", order.UserID),
+			EntityType: "individual",
+		},
 	}
 
-	// Create the preference in MP using the injected client
-	result, err := s.mercadopagoClient.CreatePreference(ctx, prefReq)
+	paymentCreated, err := s.mercadopagoClient.CreatePayment(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("mercadopago api error: %w", err)
 	}
 
-	return result, nil
+	return paymentCreated, nil
 }
 
 func (s *paymentService) GetPaymentByID(id uint) (*models.PaymentResponse, error) {
