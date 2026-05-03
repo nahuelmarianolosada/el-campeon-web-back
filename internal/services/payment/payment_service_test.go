@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/mercadopago/sdk-go/pkg/preference"
+	orderMp "github.com/mercadopago/sdk-go/pkg/order"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/config"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
 	orderStatus "github.com/nahuelmarianolosada/el-campeon-web/internal/services/order/status"
@@ -20,12 +20,20 @@ type MockMercadopagoClient struct {
 	mock.Mock
 }
 
-func (m *MockMercadopagoClient) CreatePreference(ctx context.Context, req preference.Request) (*preference.Response, error) {
+func (m *MockMercadopagoClient) CreatePayment(ctx context.Context, req orderMp.Request) (*orderMp.Response, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*preference.Response), args.Error(1)
+	return args.Get(0).(*orderMp.Response), args.Error(1)
+}
+
+func (m *MockMercadopagoClient) CancelPayment(ctx context.Context, paymentID int) (*orderMp.Response, error) {
+	args := m.Called(ctx, paymentID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*orderMp.Response), args.Error(1)
 }
 
 type MockPaymentRepository struct {
@@ -168,6 +176,11 @@ func TestCreatePayment(t *testing.T) {
 		UserID: 1,
 		Total:  100.0,
 		Status: orderStatus.Pending,
+		User: &models.User{
+			ID:        1,
+			FirstName: "Test User",
+			LastName:  "Test Last Name",
+		},
 		Items: []models.OrderItem{
 			{
 				ID:       1,
@@ -183,22 +196,15 @@ func TestCreatePayment(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		orderRepo.On("FindByID", uint(1)).Return(order, nil).Once()
 
-		// Setup the mock Mercadopago client to return a successful preference
-		mockPreference := &preference.Response{
-			ID: "preference-123",
-			Items: []preference.ItemResponse{
-				{
-					ID:        "1",
-					Title:     "Test Product",
-					Quantity:  1,
-					UnitPrice: 100.0,
-				},
-			},
+		// Setup the mock Mercadopago client to return a successful payment response
+		mockPaymentResponse := &orderMp.Response{
+			ID: "123456",
 		}
-		mpClient.On("CreatePreference", mock.Anything, mock.Anything).Return(mockPreference, nil).Once()
+		mpClient.On("CreatePayment", mock.Anything, mock.Anything).Return(mockPaymentResponse, nil).Once()
 
 		paymentRepo.On("Create", mock.AnythingOfType("*models.Payment")).Return(nil).Once()
 		paymentRepo.On("Update", mock.AnythingOfType("*models.Payment")).Return(nil).Once()
+		orderRepo.On("Update", mock.AnythingOfType("*models.Order")).Return(nil).Once()
 
 		resp, err := service.CreatePayment(ctx, req)
 
@@ -208,7 +214,7 @@ func TestCreatePayment(t *testing.T) {
 		assert.Equal(t, order.UserID, resp.UserID)
 		assert.Equal(t, req.Amount, resp.Amount)
 		assert.Equal(t, paymentStatus.Approved, resp.Status)
-		assert.Equal(t, "preference-123", resp.MercadopagoPreferenceID)
+		assert.Equal(t, "123456", resp.MercadopagoPreferenceID)
 		paymentRepo.AssertExpectations(t)
 		orderRepo.AssertExpectations(t)
 		mpClient.AssertExpectations(t)
@@ -267,10 +273,10 @@ func TestGetPaymentByID(t *testing.T) {
 	paymentRepo := new(MockPaymentRepository)
 	service := NewPaymentService(paymentRepo, nil, nil)
 
-	payment := &models.Payment{ID: 1, OrderID: 10}
+	paymentData := &models.Payment{ID: 1, OrderID: 10}
 
 	t.Run("Success", func(t *testing.T) {
-		paymentRepo.On("FindByID", uint(1)).Return(payment, nil).Once()
+		paymentRepo.On("FindByID", uint(1)).Return(paymentData, nil).Once()
 
 		resp, err := service.GetPaymentByID(1)
 
@@ -325,10 +331,10 @@ func TestGetPaymentByOrderID(t *testing.T) {
 	paymentRepo := new(MockPaymentRepository)
 	service := NewPaymentService(paymentRepo, nil, nil)
 
-	payment := &models.Payment{ID: 1, OrderID: 10}
+	paymentData := &models.Payment{ID: 1, OrderID: 10}
 
 	t.Run("Success", func(t *testing.T) {
-		paymentRepo.On("FindByOrderID", uint(10)).Return(payment, nil).Once()
+		paymentRepo.On("FindByOrderID", uint(10)).Return(paymentData, nil).Once()
 
 		resp, err := service.GetPaymentByOrderID(10)
 
@@ -353,10 +359,10 @@ func TestUpdatePaymentStatus(t *testing.T) {
 	orderRepo := new(MockOrderRepository)
 	service := NewPaymentService(paymentRepo, orderRepo, nil)
 
-	payment := &models.Payment{ID: 1, OrderID: 10, Status: "PENDING"}
+	paymentData := &models.Payment{ID: 1, OrderID: 10, Status: "PENDING"}
 
 	t.Run("ApproveSuccess", func(t *testing.T) {
-		paymentRepo.On("FindByID", uint(1)).Return(payment, nil).Once()
+		paymentRepo.On("FindByID", uint(1)).Return(paymentData, nil).Once()
 		orderRepo.On("UpdateStatus", uint(10), "CONFIRMED").Return(nil).Once()
 		paymentRepo.On("Update", mock.AnythingOfType("*models.Payment")).Return(nil).Run(func(args mock.Arguments) {
 			p := args.Get(0).(*models.Payment)

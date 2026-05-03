@@ -8,6 +8,7 @@ import (
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/repositories"
 	orderStatusService "github.com/nahuelmarianolosada/el-campeon-web/internal/services/order/status"
+	paymentStatus "github.com/nahuelmarianolosada/el-campeon-web/internal/services/payment/status"
 )
 
 type OrderService interface {
@@ -19,20 +20,23 @@ type OrderService interface {
 }
 
 type orderService struct {
-	orderRepo repositories.OrderRepository
-	cartRepo  repositories.CartRepository
-	userRepo  repositories.UserRepository
+	orderRepo   repositories.OrderRepository
+	cartRepo    repositories.CartRepository
+	userRepo    repositories.UserRepository
+	paymentRepo repositories.PaymentRepository
 }
 
 func NewOrderService(
 	orderRepo repositories.OrderRepository,
 	cartRepo repositories.CartRepository,
 	userRepo repositories.UserRepository,
+	paymentRepo repositories.PaymentRepository,
 ) OrderService {
 	return &orderService{
-		orderRepo: orderRepo,
-		cartRepo:  cartRepo,
-		userRepo:  userRepo,
+		orderRepo:   orderRepo,
+		cartRepo:    cartRepo,
+		userRepo:    userRepo,
+		paymentRepo: paymentRepo,
 	}
 }
 
@@ -136,6 +140,15 @@ func (s *orderService) UpdateOrderStatus(orderID uint, status string) (*models.O
 
 	if err := s.orderRepo.UpdateStatus(orderID, status); err != nil {
 		return nil, fmt.Errorf("error updating order status: %w", err)
+	}
+
+	paymentFound, err := s.paymentRepo.FindByOrderID(orderID)
+	if err != nil {
+		return nil, fmt.Errorf("error finding payment for order: %w", err)
+	}
+
+	if paymentFound != nil && paymentFound.Status == paymentStatus.Pending {
+
 	}
 
 	return s.GetOrderByID(orderID)
