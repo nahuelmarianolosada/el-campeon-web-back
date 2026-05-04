@@ -9,6 +9,7 @@ import (
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/order"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/payment"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/product"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/product/variant"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/report"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/user"
 	"gorm.io/gorm"
@@ -22,6 +23,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	orderRepo := repositories.NewOrderRepository(db)
 	paymentRepo := repositories.NewPaymentRepository(db)
 	reportRepo := repositories.NewReportRepository(db)
+	variantRepo := repositories.NewProductVariantRepository(db)
 
 	// Inicializar servicios
 	userService := user.NewUserService(userRepo, cfg)
@@ -30,6 +32,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	orderService := order.NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 	paymentService := payment.NewPaymentService(paymentRepo, orderRepo, cfg)
 	reportService := report.NewReportService(reportRepo)
+	variantService := variant.NewProductVariantService(variantRepo, productRepo)
 
 	// Inicializar handlers
 	authHandler := NewAuthHandler(userService)
@@ -38,6 +41,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	orderHandler := NewOrderHandler(orderService)
 	paymentHandler := NewPaymentHandler(paymentService)
 	reportHandler := NewReportHandler(reportService)
+	variantHandler := NewProductVariantHandler(variantService)
 
 	// Auth routes (sin autenticación)
 	authGroup := router.Group("/auth")
@@ -54,6 +58,21 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 		productRoutes.GET("/:id", productHandler.GetProduct)
 		productRoutes.GET("/sku", productHandler.GetProductBySKU)
 		productRoutes.GET("/category/:category", productHandler.ListProductsByCategory)
+		productRoutes.GET("/:id/variants", variantHandler.GetProductVariants)
+		productRoutes.GET("/:id/variant-combinations", variantHandler.GetProductVariantCombinations)
+	}
+
+	// Public variant combination routes
+	variantRoutes := router.Group("/api/variant-combinations")
+	{
+		variantRoutes.GET("/:combinationId", variantHandler.GetVariantCombination)
+		variantRoutes.GET("/sku", variantHandler.GetVariantCombinationBySKU)
+	}
+
+	// Public variant routes
+	variantSingleRoutes := router.Group("/api/variants")
+	{
+		variantSingleRoutes.GET("/:variantId", variantHandler.GetVariant)
 	}
 
 	// Protected routes - requieren autenticación
@@ -106,6 +125,25 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 			productAdmin.POST("", productHandler.CreateProduct)
 			productAdmin.PUT("/:id", productHandler.UpdateProduct)
 			productAdmin.DELETE("/:id", productHandler.DeleteProduct)
+			productAdmin.POST("/:id/variants", variantHandler.CreateProductVariant)
+			productAdmin.PUT("/:id/variants/:variantId", variantHandler.UpdateProductVariant)
+			productAdmin.DELETE("/:id/variants/:variantId", variantHandler.DeleteProductVariant)
+			productAdmin.POST("/:id/variant-combinations", variantHandler.CreateVariantCombination)
+			productAdmin.PUT("/:id/variant-combinations/:combinationId", variantHandler.UpdateVariantCombination)
+			productAdmin.DELETE("/:id/variant-combinations/:combinationId", variantHandler.DeleteVariantCombination)
+		}
+
+		// Direct variant admin routes
+		variantAdmin := admin.Group("/api/variants")
+		{
+			variantAdmin.PUT("/:variantId", variantHandler.UpdateProductVariant)
+			variantAdmin.DELETE("/:variantId", variantHandler.DeleteProductVariant)
+		}
+
+		variantCombinationAdmin := admin.Group("/api/variant-combinations")
+		{
+			variantCombinationAdmin.PUT("/:combinationId", variantHandler.UpdateVariantCombination)
+			variantCombinationAdmin.DELETE("/:combinationId", variantHandler.DeleteVariantCombination)
 		}
 
 		// Order admin routes

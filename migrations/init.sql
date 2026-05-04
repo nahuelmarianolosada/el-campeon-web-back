@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS products (
   min_bulk_quantity INT NOT NULL DEFAULT 10,
   image_url VARCHAR(500),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  has_variants BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at TIMESTAMP NULL,
@@ -47,7 +48,62 @@ CREATE TABLE IF NOT EXISTS products (
   KEY idx_deleted_at (deleted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Tabla: carts
+-- Tabla: product_variants (tipos de variantes como Color, Tamaño, Material, etc.)
+CREATE TABLE IF NOT EXISTS product_variants
+(
+    id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    product_id BIGINT UNSIGNED NOT NULL,
+    name       VARCHAR(255)    NOT NULL,
+    type       VARCHAR(100)    NOT NULL,
+    created_at TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP       NULL,
+
+    FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+    KEY idx_product_id (product_id),
+    KEY idx_deleted_at (deleted_at)
+    ) ENGINE = InnoDB
+    DEFAULT CHARSET = utf8mb4
+    COLLATE = utf8mb4_unicode_ci;
+
+-- Tabla: product_variant_values (valores específicos como Rojo, Azul, Grande, Pequeño, etc.)
+CREATE TABLE IF NOT EXISTS product_variant_values (
+                                                      id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                                                      variant_id INT UNSIGNED NOT NULL,
+                                                      value VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL,
+
+    FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE CASCADE,
+    KEY idx_variant_id (variant_id),
+    KEY idx_deleted_at (deleted_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tabla: product_variant_combinations (combinaciones específicas de variantes con su propio stock y SKU)
+CREATE TABLE IF NOT EXISTS product_variant_combinations
+(
+    id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    product_id          BIGINT UNSIGNED NOT NULL,
+    sku                 VARCHAR(255)    NOT NULL UNIQUE KEY,
+    variant_combination JSON            NOT NULL,
+    stock               INT             NOT NULL DEFAULT 0,
+    price_adjustment    DECIMAL(10, 2)           DEFAULT 0,
+    image_url           VARCHAR(500),
+    is_active           BOOLEAN         NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at          TIMESTAMP       NULL,
+
+    FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+    KEY idx_product_id (product_id),
+    KEY idx_sku (sku),
+    KEY idx_is_active (is_active),
+    KEY idx_deleted_at (deleted_at)
+    ) ENGINE = InnoDB
+    DEFAULT CHARSET = utf8mb4
+    COLLATE = utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS carts (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id INT UNSIGNED NOT NULL UNIQUE KEY,

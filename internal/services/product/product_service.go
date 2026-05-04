@@ -171,6 +171,7 @@ func (s *productService) toProductResponse(product *models.Product) *models.Prod
 		MinBulkQuantity: product.MinBulkQuantity,
 		ImageURL:        product.ImageURL,
 		IsActive:        product.IsActive,
+		HasVariants:     product.HasVariants,
 		CreatedAt:       product.CreatedAt,
 	}
 }
