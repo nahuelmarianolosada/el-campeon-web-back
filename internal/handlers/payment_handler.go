@@ -48,7 +48,7 @@ func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 
 	payment, err := h.paymentService.CreatePayment(ctx, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 

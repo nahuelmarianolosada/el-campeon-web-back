@@ -9,6 +9,7 @@ import (
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/order"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/payment"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/product"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/report"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/user"
 	"gorm.io/gorm"
 )
@@ -20,6 +21,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	cartRepo := repositories.NewCartRepository(db)
 	orderRepo := repositories.NewOrderRepository(db)
 	paymentRepo := repositories.NewPaymentRepository(db)
+	reportRepo := repositories.NewReportRepository(db)
 
 	// Inicializar servicios
 	userService := user.NewUserService(userRepo, cfg)
@@ -27,6 +29,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	cartService := cart.NewCartService(cartRepo, productRepo)
 	orderService := order.NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 	paymentService := payment.NewPaymentService(paymentRepo, orderRepo, cfg)
+	reportService := report.NewReportService(reportRepo)
 
 	// Inicializar handlers
 	authHandler := NewAuthHandler(userService)
@@ -34,6 +37,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	cartHandler := NewCartHandler(cartService)
 	orderHandler := NewOrderHandler(orderService)
 	paymentHandler := NewPaymentHandler(paymentService)
+	reportHandler := NewReportHandler(reportService)
 
 	// Auth routes (sin autenticación)
 	authGroup := router.Group("/auth")
@@ -116,6 +120,14 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 		{
 			paymentAdmin.GET("", paymentHandler.ListAllPayments)
 			paymentAdmin.PUT("/:id/status", paymentHandler.UpdatePaymentStatus)
+		}
+
+		// Report admin routes
+		reportAdmin := admin.Group("/api/reports")
+		{
+			reportAdmin.GET("/orders", reportHandler.GetOrdersReport)
+			reportAdmin.GET("/low-stock", reportHandler.GetLowStockProductsReport)
+			reportAdmin.GET("/revenue", reportHandler.GetDailyRevenueReport)
 		}
 	}
 

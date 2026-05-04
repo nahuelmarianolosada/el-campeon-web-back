@@ -112,8 +112,7 @@ func (h *CartHandler) UpdateCartItem(c *gin.Context) {
 		return
 	}
 
-	isBulkBuyer := false
-	if err := h.cartService.UpdateCartItem(userID.(uint), uint(itemID), req.Quantity, isBulkBuyer); err != nil {
+	if err := h.cartService.UpdateCartItem(userID.(uint), uint(itemID), req.Quantity); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
