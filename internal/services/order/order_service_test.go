@@ -157,6 +157,10 @@ func (m *MockOrderCartRepository) UpdateItem(_ uint, _ int) error {
 	return nil
 }
 
+func (m *MockOrderCartRepository) UpdateCompleteItemInTheCart(_ *models.CartItem) error {
+	return nil
+}
+
 func (m *MockOrderCartRepository) RemoveItem(_ uint) error {
 	return nil
 }
