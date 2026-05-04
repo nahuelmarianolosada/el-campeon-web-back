@@ -94,6 +94,14 @@ func (m *MockCartRepository) UpdateItem(itemID uint, quantity int) error {
 	return nil
 }
 
+func (m *MockCartRepository) UpdateCompleteItemInTheCart(cartItem *models.CartItem) error {
+	if m.UpdateItemErr != nil {
+		return m.UpdateItemErr
+	}
+	m.items[cartItem.ID] = cartItem
+	return nil
+}
+
 func (m *MockCartRepository) RemoveItem(itemID uint) error {
 	if m.RemoveItemErr != nil {
 		return m.RemoveItemErr
@@ -387,7 +395,7 @@ func TestUpdateCartItem_Success(t *testing.T) {
 	}
 
 	// Actualizar cantidad
-	err := service.UpdateCartItem(1, item.ID, 10, false)
+	err := service.UpdateCartItem(1, item.ID, 10)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

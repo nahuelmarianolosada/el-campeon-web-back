@@ -9,6 +9,7 @@ type CartRepository interface {
 	GetOrCreateCart(userID uint) (*models.Cart, error)
 	AddItem(userID uint, item *models.CartItem) error
 	UpdateItem(itemID uint, quantity int) error
+	UpdateCompleteItemInTheCart(cartItem *models.CartItem) error
 	RemoveItem(itemID uint) error
 	GetCart(userID uint) (*models.Cart, error)
 	ClearCart(userID uint) error
@@ -52,13 +53,21 @@ func (r *cartRepository) UpdateItem(itemID uint, quantity int) error {
 	return r.db.Model(&models.CartItem{}).Where("id = ?", itemID).Update("quantity", quantity).Error
 }
 
+func (r *cartRepository) UpdateCompleteItemInTheCart(cartItem *models.CartItem) error {
+	return r.db.Save(cartItem).Error
+}
+
 func (r *cartRepository) RemoveItem(itemID uint) error {
 	return r.db.Delete(&models.CartItem{}, itemID).Error
 }
 
 func (r *cartRepository) GetCart(userID uint) (*models.Cart, error) {
 	var cart models.Cart
-	if err := r.db.Preload("Items").Preload("Items.Product").First(&cart, "user_id = ?", userID).Error; err != nil {
+	if err := r.db.Preload("Items").
+		Preload("Items.Product").
+		Preload("User").
+		First(&cart, "user_id = ?", userID).
+		Error; err != nil {
 		return nil, err
 	}
 	return &cart, nil

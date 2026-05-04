@@ -2,6 +2,7 @@ package cart
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/repositories"
@@ -10,7 +11,7 @@ import (
 type CartService interface {
 	AddToCart(userID uint, req *models.AddToCartRequest, isBulkBuyer bool) error
 	GetCart(userID uint) (*models.CartResponse, error)
-	UpdateCartItem(userID uint, itemID uint, quantity int, isBulkBuyer bool) error
+	UpdateCartItem(userID uint, itemID uint, quantity int) error
 	RemoveFromCart(userID uint, itemID uint) error
 	ClearCart(userID uint) error
 	CalculateCartTotal(userID uint) (float64, error)
@@ -84,7 +85,7 @@ func (s *cartService) GetCart(userID uint) (*models.CartResponse, error) {
 	}, nil
 }
 
-func (s *cartService) UpdateCartItem(userID uint, itemID uint, quantity int, isBulkBuyer bool) error {
+func (s *cartService) UpdateCartItem(userID uint, itemID uint, quantity int) error {
 	// Obtener el item actual
 	cart, err := s.cartRepo.GetCart(userID)
 	if err != nil {
@@ -114,20 +115,21 @@ func (s *cartService) UpdateCartItem(userID uint, itemID uint, quantity int, isB
 	}
 
 	// Actualizar precio si cambió el estatus de mayorista
-	/*var price float64
-	if isBulkBuyer && quantity >= product.MinBulkQuantity {
+	var price float64
+	if quantity >= product.MinBulkQuantity {
 		price = product.PriceWholesale
 	} else {
 		price = product.PriceRetail
-	}*/
+	}
 
-	// Actualizar la cantidad en la BD
-	if err := s.cartRepo.UpdateItem(itemID, quantity); err != nil {
+	item.Price = price
+	item.Quantity = quantity
+	item.UpdatedAt = time.Now()
+
+	if err := s.cartRepo.UpdateCompleteItemInTheCart(item); err != nil {
 		return fmt.Errorf("error updating cart item: %w", err)
 	}
 
-	// Si el precio cambió, necesitamos actualizar también
-	// Por ahora solo actualizamos la cantidad
 	return nil
 }
 
