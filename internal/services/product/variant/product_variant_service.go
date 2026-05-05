@@ -49,6 +49,41 @@ func (s *productVariantService) CreateVariant(productID uint, req *models.Create
 		return nil, fmt.Errorf("product not found: %w", err)
 	}
 
+	// Check if variant already exists
+	var productVariants []models.ProductVariant
+	if productVariants, err = s.variantRepo.FindVariantsByProductIDAndValue(productID, req.Name); err != nil {
+		return nil, fmt.Errorf("error finding variants: %w", err)
+	}
+
+	if len(productVariants) > 0 {
+		variant := &productVariants[0]
+		existingValues, err := s.variantRepo.FindVariantValuesByVariantID(variant.ID)
+		if err != nil {
+			return nil, fmt.Errorf("error finding variant values: %w", err)
+		}
+
+		existingValuesMap := make(map[string]bool)
+		for _, v := range existingValues {
+			existingValuesMap[v.Value] = true
+		}
+
+		for _, reqValue := range req.Values {
+			if !existingValuesMap[reqValue] {
+				newVariantValue := &models.ProductVariantValue{
+					VariantID: variant.ID,
+					Value:     reqValue,
+				}
+				createdValue, err := s.variantRepo.CreateVariantValue(newVariantValue)
+				if err != nil {
+					return nil, fmt.Errorf("error creating variant value: %w", err)
+				}
+				existingValues = append(existingValues, *createdValue)
+				existingValuesMap[reqValue] = true
+			}
+		}
+		return s.toVariantResponse(variant, existingValues), nil
+	}
+
 	variant := &models.ProductVariant{
 		ProductID: productID,
 		Name:      req.Name,
@@ -60,17 +95,20 @@ func (s *productVariantService) CreateVariant(productID uint, req *models.Create
 	}
 
 	// Create variant values
+	var variantValues []models.ProductVariantValue
 	for _, value := range req.Values {
 		variantValue := &models.ProductVariantValue{
 			VariantID: variant.ID,
 			Value:     value,
 		}
-		if err := s.variantRepo.CreateVariantValue(variantValue); err != nil {
+		if newVariantValue, err := s.variantRepo.CreateVariantValue(variantValue); err != nil {
 			return nil, fmt.Errorf("error creating variant value: %w", err)
+		} else {
+			variantValues = append(variantValues, *newVariantValue)
 		}
 	}
 
-	return s.toVariantResponse(variant, req.Values), nil
+	return s.toVariantResponse(variant, variantValues), nil
 }
 
 func (s *productVariantService) GetVariant(id uint) (*models.ProductVariantResponse, error) {
@@ -84,12 +122,7 @@ func (s *productVariantService) GetVariant(id uint) (*models.ProductVariantRespo
 		return nil, fmt.Errorf("error finding variant values: %w", err)
 	}
 
-	var valueStrings []string
-	for _, v := range values {
-		valueStrings = append(valueStrings, v.Value)
-	}
-
-	return s.toVariantResponse(variant, valueStrings), nil
+	return s.toVariantResponse(variant, values), nil
 }
 
 func (s *productVariantService) GetProductVariants(productID uint) ([]models.ProductVariantResponse, error) {
@@ -105,12 +138,7 @@ func (s *productVariantService) GetProductVariants(productID uint) ([]models.Pro
 			return nil, fmt.Errorf("error finding variant values: %w", err)
 		}
 
-		var valueStrings []string
-		for _, v := range values {
-			valueStrings = append(valueStrings, v.Value)
-		}
-
-		responses = append(responses, *s.toVariantResponse(&variant, valueStrings))
+		responses = append(responses, *s.toVariantResponse(&variant, values))
 	}
 
 	return responses, nil
@@ -143,7 +171,7 @@ func (s *productVariantService) UpdateVariant(id uint, req *models.UpdateProduct
 				VariantID: id,
 				Value:     value,
 			}
-			if err := s.variantRepo.CreateVariantValue(variantValue); err != nil {
+			if _, err := s.variantRepo.CreateVariantValue(variantValue); err != nil {
 				return nil, fmt.Errorf("error creating variant value: %w", err)
 			}
 		}
@@ -268,11 +296,12 @@ func (s *productVariantService) DeleteVariantCombination(id uint) error {
 
 // Helper functions
 
-func (s *productVariantService) toVariantResponse(variant *models.ProductVariant, values []string) *models.ProductVariantResponse {
+func (s *productVariantService) toVariantResponse(variant *models.ProductVariant, values []models.ProductVariantValue) *models.ProductVariantResponse {
 	valueResponses := make([]models.ProductVariantValueResponse, len(values))
 	for i, v := range values {
 		valueResponses[i] = models.ProductVariantValueResponse{
-			Value: v,
+			ID:    v.ID,
+			Value: v.Value,
 		}
 	}
 
@@ -304,5 +333,3 @@ func (s *productVariantService) toVariantCombinationResponse(combination *models
 		CreatedAt:          combination.CreatedAt,
 	}
 }
-
-

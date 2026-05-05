@@ -45,9 +45,20 @@ func (m *MockProductVariantRepository) DeleteVariant(id uint) error {
 	return args.Error(0)
 }
 
-func (m *MockProductVariantRepository) CreateVariantValue(value *models.ProductVariantValue) error {
+func (m *MockProductVariantRepository) CreateVariantValue(value *models.ProductVariantValue) (*models.ProductVariantValue, error) {
 	args := m.Called(value)
-	return args.Error(0)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.ProductVariantValue), args.Error(1)
+}
+
+func (m *MockProductVariantRepository) FindVariantsByProductIDAndValue(productID uint, value string) ([]models.ProductVariant, error) {
+	args := m.Called(productID, value)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.ProductVariant), args.Error(1)
 }
 
 func (m *MockProductVariantRepository) FindVariantValueByID(id uint) (*models.ProductVariantValue, error) {
@@ -206,6 +217,7 @@ func TestCreateVariant(t *testing.T) {
 	}
 
 	mockProductRepo.On("FindByID", uint(1)).Return(product, nil)
+	mockVariantRepo.On("FindVariantsByProductIDAndValue", uint(1), "Color").Return([]models.ProductVariant{}, nil)
 	mockVariantRepo.On("CreateVariant", mock.MatchedBy(func(v *models.ProductVariant) bool {
 		return v.ProductID == 1 && v.Name == "Color" && v.Type == "color"
 	})).Run(func(args mock.Arguments) {
@@ -215,7 +227,7 @@ func TestCreateVariant(t *testing.T) {
 
 	mockVariantRepo.On("CreateVariantValue", mock.MatchedBy(func(vv *models.ProductVariantValue) bool {
 		return vv.VariantID == 1 && (vv.Value == "Red" || vv.Value == "Blue" || vv.Value == "Green")
-	})).Return(nil)
+	})).Return(&models.ProductVariantValue{}, nil)
 
 	resp, err := service.CreateVariant(1, req)
 
@@ -224,6 +236,59 @@ func TestCreateVariant(t *testing.T) {
 	assert.Equal(t, "Color", resp.Name)
 	assert.Equal(t, "color", resp.Type)
 	assert.Len(t, resp.Values, 3)
+
+	mockProductRepo.AssertExpectations(t)
+	mockVariantRepo.AssertExpectations(t)
+}
+
+func TestCreateVariant_ExistingVariant(t *testing.T) {
+	mockVariantRepo := new(MockProductVariantRepository)
+	mockProductRepo := new(MockProductRepository)
+
+	service := NewProductVariantService(mockVariantRepo, mockProductRepo)
+
+	productID := uint(1)
+	variantID := uint(10)
+	product := &models.Product{ID: productID, Name: "Test Product"}
+
+	existingVariant := models.ProductVariant{
+		ID:        variantID,
+		ProductID: productID,
+		Name:      "Color",
+		Type:      "color",
+	}
+
+	existingValues := []models.ProductVariantValue{
+		{ID: 100, VariantID: variantID, Value: "Red"},
+		{ID: 101, VariantID: variantID, Value: "Blue"},
+	}
+
+	req := &models.CreateProductVariantRequest{
+		Name:   "Color",
+		Type:   "color",
+		Values: []string{"Red", "Green"}, // Red exists, Green is new
+	}
+
+	mockProductRepo.On("FindByID", productID).Return(product, nil)
+	mockVariantRepo.On("FindVariantsByProductIDAndValue", productID, "Color").Return([]models.ProductVariant{existingVariant}, nil)
+	mockVariantRepo.On("FindVariantValuesByVariantID", variantID).Return(existingValues, nil)
+
+	// Expect only "Green" to be created
+	mockVariantRepo.On("CreateVariantValue", mock.MatchedBy(func(vv *models.ProductVariantValue) bool {
+		return vv.VariantID == variantID && vv.Value == "Green"
+	})).Return(&models.ProductVariantValue{ID: 102, VariantID: variantID, Value: "Green"}, nil)
+
+	resp, err := service.CreateVariant(productID, req)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, "Color", resp.Name)
+	// Response should contain Red, Blue (existing) and Green (new)
+	var respValues []string
+	for _, v := range resp.Values {
+		respValues = append(respValues, v.Value)
+	}
+	assert.ElementsMatch(t, []string{"Red", "Blue", "Green"}, respValues)
 
 	mockProductRepo.AssertExpectations(t)
 	mockVariantRepo.AssertExpectations(t)

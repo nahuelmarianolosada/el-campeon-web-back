@@ -10,11 +10,12 @@ type ProductVariantRepository interface {
 	CreateVariant(variant *models.ProductVariant) error
 	FindVariantByID(id uint) (*models.ProductVariant, error)
 	FindVariantsByProductID(productID uint) ([]models.ProductVariant, error)
+	FindVariantsByProductIDAndValue(productID uint, value string) ([]models.ProductVariant, error)
 	UpdateVariant(variant *models.ProductVariant) error
 	DeleteVariant(id uint) error
 
 	// Variant Values
-	CreateVariantValue(value *models.ProductVariantValue) error
+	CreateVariantValue(value *models.ProductVariantValue) (*models.ProductVariantValue, error)
 	FindVariantValueByID(id uint) (*models.ProductVariantValue, error)
 	FindVariantValuesByVariantID(variantID uint) ([]models.ProductVariantValue, error)
 	UpdateVariantValue(value *models.ProductVariantValue) error
@@ -61,6 +62,14 @@ func (r *productVariantRepository) FindVariantsByProductID(productID uint) ([]mo
 	return variants, nil
 }
 
+func (r *productVariantRepository) FindVariantsByProductIDAndValue(productID uint, value string) ([]models.ProductVariant, error) {
+	var variants []models.ProductVariant
+	if err := r.db.Where("product_id = ? AND name = ?", productID, value).Find(&variants).Error; err != nil {
+		return nil, err
+	}
+	return variants, nil
+}
+
 func (r *productVariantRepository) UpdateVariant(variant *models.ProductVariant) error {
 	return r.db.Save(variant).Error
 }
@@ -71,8 +80,11 @@ func (r *productVariantRepository) DeleteVariant(id uint) error {
 
 // Variant Value methods
 
-func (r *productVariantRepository) CreateVariantValue(value *models.ProductVariantValue) error {
-	return r.db.Create(value).Error
+func (r *productVariantRepository) CreateVariantValue(value *models.ProductVariantValue) (*models.ProductVariantValue, error) {
+	if err := r.db.Create(value).Error; err != nil {
+		return nil, err
+	}
+	return value, nil
 }
 
 func (r *productVariantRepository) FindVariantValueByID(id uint) (*models.ProductVariantValue, error) {
@@ -144,4 +156,3 @@ func (r *productVariantRepository) DeleteVariantCombination(id uint) error {
 func (r *productVariantRepository) UpdateVariantCombinationStock(id uint, quantity int) error {
 	return r.db.Model(&models.ProductVariantCombination{ID: id}).Update("stock", gorm.Expr("stock + ?", quantity)).Error
 }
-
