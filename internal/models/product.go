@@ -7,20 +7,23 @@ import (
 )
 
 type Product struct {
-	ID              uint           `gorm:"primaryKey" json:"id"`
-	SKU             string         `gorm:"type:varchar(255);uniqueIndex;not null" json:"sku"`
-	Name            string         `gorm:"not null" json:"name"`
-	Description     string         `gorm:"type:varchar(255)" json:"description"`
-	Category        string         `gorm:"not null" json:"category"`
-	PriceRetail     float64        `gorm:"not null" json:"price_retail"`    // Precio minorista
-	PriceWholesale  float64        `gorm:"not null" json:"price_wholesale"` // Precio mayorista
-	Stock           int            `gorm:"not null;default:0" json:"stock"`
-	MinBulkQuantity int            `gorm:"default:10" json:"min_bulk_quantity"` // Cantidad mínima para aplicar mayorista
-	ImageURL        string         `json:"image_url"`
-	IsActive        bool           `gorm:"default:true" json:"is_active"`
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at"`
-	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
+	ID                     uint                          `gorm:"primaryKey" json:"id"`
+	SKU                    string                        `gorm:"type:varchar(255);uniqueIndex;not null" json:"sku"`
+	Name                   string                        `gorm:"not null" json:"name"`
+	Description            string                        `gorm:"type:varchar(255)" json:"description"`
+	Category               string                        `gorm:"not null" json:"category"`
+	PriceRetail            float64                       `gorm:"not null" json:"price_retail"`    // Precio minorista
+	PriceWholesale         float64                       `gorm:"not null" json:"price_wholesale"` // Precio mayorista
+	Stock                  int                           `gorm:"not null;default:0" json:"stock"`
+	MinBulkQuantity        int                           `gorm:"default:10" json:"min_bulk_quantity"` // Cantidad mínima para aplicar mayorista
+	ImageURL               string                        `json:"image_url"`
+	IsActive               bool                          `gorm:"default:true" json:"is_active"`
+	HasVariants            bool                          `gorm:"default:false" json:"has_variants"`
+	Variants               []ProductVariant              `gorm:"foreignKey:ProductID" json:"-"`
+	VariantCombinations    []ProductVariantCombination   `gorm:"foreignKey:ProductID" json:"-"`
+	CreatedAt              time.Time                     `json:"created_at"`
+	UpdatedAt              time.Time                     `json:"updated_at"`
+	DeletedAt              gorm.DeletedAt                `gorm:"index" json:"-"`
 }
 
 type CreateProductRequest struct {
@@ -48,16 +51,18 @@ type UpdateProductRequest struct {
 }
 
 type ProductResponse struct {
-	ID              uint      `json:"id"`
-	SKU             string    `json:"sku"`
-	Name            string    `json:"name"`
-	Description     string    `json:"description"`
-	Category        string    `json:"category"`
-	PriceRetail     float64   `json:"price_retail"`
-	PriceWholesale  float64   `json:"price_wholesale"`
-	Stock           int       `json:"stock"`
-	MinBulkQuantity int       `json:"min_bulk_quantity"`
-	ImageURL        string    `json:"image_url"`
-	IsActive        bool      `json:"is_active"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID              uint                             `json:"id"`
+	SKU             string                           `json:"sku"`
+	Name            string                           `json:"name"`
+	Description     string                           `json:"description"`
+	Category        string                           `json:"category"`
+	PriceRetail     float64                          `json:"price_retail"`
+	PriceWholesale  float64                          `json:"price_wholesale"`
+	Stock           int                              `json:"stock"`
+	MinBulkQuantity int                              `json:"min_bulk_quantity"`
+	ImageURL        string                           `json:"image_url"`
+	IsActive        bool                             `json:"is_active"`
+	HasVariants     bool                             `json:"has_variants"`
+	Variants        []ProductVariantResponse         `json:"variants,omitempty"`
+	CreatedAt       time.Time                        `json:"created_at"`
 }
