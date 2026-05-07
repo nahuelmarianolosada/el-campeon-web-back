@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE TABLE IF NOT EXISTS product_variants
 (
     id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    product_id BIGINT UNSIGNED NOT NULL,
+    product_id INT UNSIGNED NOT NULL,
     name       VARCHAR(255)    NOT NULL,
     type       VARCHAR(100)    NOT NULL,
     created_at TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS product_variant_values (
 CREATE TABLE IF NOT EXISTS product_variant_combinations
 (
     id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    product_id          BIGINT UNSIGNED NOT NULL,
+    product_id          INT UNSIGNED NOT NULL,
     sku                 VARCHAR(255)    NOT NULL UNIQUE KEY,
     variant_combination JSON            NOT NULL,
     stock               INT             NOT NULL DEFAULT 0,
@@ -203,7 +203,7 @@ CREATE TABLE IF NOT EXISTS payments (
 
 -- Usuario admin (contraseña hasheada con bcrypt: "admin123")
 INSERT INTO users (email, first_name, last_name, password, role, is_active) VALUES
-('admin@example.com', 'Admin', 'System', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcg7b3XeKeUxWdeS86E36jbMv/u', 'ADMIN', TRUE)
+('admin@example.com', 'Admin', 'System', '$2a$12$.qOLnDIwjinV1GI8DivLzugmSOTB3GzxjSR2hFyBhmuDYDNHzneFy', 'ADMIN', TRUE)
 ON DUPLICATE KEY UPDATE id=id;
 
 -- Usuario regular (contraseña hasheada: "user1234")

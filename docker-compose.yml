@@ -5,14 +5,15 @@ services:
     image: mysql:8.0
     container_name: el_campeon_db
     environment:
-      MYSQL_ROOT_PASSWORD: root_password_change_me
-      MYSQL_DATABASE: el_campeon_web
-      MYSQL_USER: el_campeon_user
-      MYSQL_PASSWORD: user_password_change_me
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - el_campeon_network
     healthcheck:
@@ -20,6 +21,7 @@ services:
       timeout: 20s
       retries: 10
       interval: 10s
+    restart: unless-stopped
 
   app:
     build:
@@ -27,27 +29,33 @@ services:
       dockerfile: dockerfiles/Dockerfile
     container_name: el_campeon_app
     environment:
-      PORT: 8080
-      ENV: development
+      PORT: ${PORT}
+      ENV: ${ENV}
       DB_HOST: db
       DB_PORT: 3306
-      DB_USER: el_campeon_user
-      DB_PASSWORD: user_password_change_me
-      DB_NAME: el_campeon_web
-      JWT_SECRET_KEY: your-secret-key-change-in-production
-      JWT_REFRESH_SECRET: your-refresh-secret-change-in-production
-      JWT_EXPIRY_HOURS: 24
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS}
       MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN}
       MERCADOPAGO_PUBLIC_KEY: ${MERCADOPAGO_PUBLIC_KEY}
-      API_BASE_URL: http://localhost:8080
+      API_BASE_URL: ${API_BASE_URL}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       db:
         condition: service_healthy
     networks:
       - el_campeon_network
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   el_campeon_network:
@@ -55,5 +63,4 @@ networks:
 
 volumes:
   mysql_data:
-    driver: local
 

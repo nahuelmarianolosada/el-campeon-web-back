@@ -1,0 +1,261 @@
+# 🚀 AWS EC2 Deployment Prompt - El Campeón Web
+
+## Project Overview
+- **Project**: El Campeón Web (Backend E-commerce)
+- **Language**: Go 1.21+
+- **Framework**: Gin HTTP Framework
+- **Database**: MySQL 8.0
+- **ORM**: GORM
+- **Authentication**: JWT (HS256)
+- **External Integration**: MercadoPago API
+- **Architecture**: Layered (Handlers → Services → Repositories)
+
+## Prerequisites
+- AWS Account with EC2 access
+- AWS CLI v2 installed and configured locally
+- Docker and Docker Compose knowledge
+- SSH client (built-in on macOS/Linux)
+- Basic understanding of DevOps concepts
+
+## AWS EC2 Instance Specifications
+- **Instance Type**: t3.small or t3.medium (recommendations below)
+- **AMI**: Ubuntu 22.04 LTS (ami-xxxxx varies by region)
+- **Storage**: 30GB EBS gp3 volume
+- **Security Group**: Custom with HTTP, HTTPS, SSH inbound
+- **Network**: Public subnet (for simplicity) or Private with NAT Gateway
+- **Region**: us-east-1 (or your preferred region)
+
+## Deployment Architecture
+```
+┌─────────────────────────────────────────┐
+│         AWS EC2 Instance                │
+├─────────────────────────────────────────┤
+│  ┌────────────────────────────────────┐ │
+│  │  Docker / Docker Compose           │ │
+│  ├────────────────────────────────────┤ │
+│  │  ┌────────┐      ┌────────────┐   │ │
+│  │  │  App   │◄────►│   MySQL    │   │ │
+│  │  │ :8080  │      │ :3306      │   │ │
+│  │  └────────┘      └────────────┘   │ │
+│  └────────────────────────────────────┘ │
+│           ↕                              │
+│  ┌────────────────────────────────────┐ │
+│  │  Nginx (Reverse Proxy)             │ │
+│  │  :80 → :8080                       │ │
+│  │  :443 → :8080 (HTTPS)              │ │
+│  └────────────────────────────────────┘ │
+└─────────────────────────────────────────┘
+         ↕
+    ┌─────────────┐
+    │  AWS RDS    │
+    │  (Backup)   │
+    └─────────────┘
+```
+
+## Key Environment Variables for Production
+```env
+# Server
+PORT=8080
+ENV=production
+
+# Database (RDS recommended for production)
+DB_HOST=<RDS_ENDPOINT>
+DB_PORT=3306
+DB_USER=el_campeon_user
+DB_PASSWORD=<STRONG_PASSWORD_32_CHARS>
+DB_NAME=el_campeon_web
+
+# JWT Secrets (generate with: openssl rand -base64 32)
+JWT_SECRET_KEY=<STRONG_SECRET_32_CHARS>
+JWT_REFRESH_SECRET=<STRONG_SECRET_32_CHARS>
+JWT_EXPIRY_HOURS=24
+
+# MercadoPago (from MercadoPago dashboard)
+MERCADOPAGO_ACCESS_TOKEN=<YOUR_ACCESS_TOKEN>
+MERCADOPAGO_PUBLIC_KEY=<YOUR_PUBLIC_KEY>
+
+# API Configuration
+API_BASE_URL=https://your-domain.com
+```
+
+## SSL/TLS Certificate Options
+1. **AWS Certificate Manager (ACM)** - Free, managed
+2. **Let's Encrypt with Certbot** - Free, manual renewal required
+3. **Third-party provider** - Commercial options
+
+## Database Strategy
+### Option A: RDS MySQL (Recommended for Production)
+- Managed by AWS
+- Automated backups
+- Multi-AZ support
+- Better performance
+- Cost: ~$15-30/month for small instance
+
+### Option B: Docker MySQL on EC2 (Dev/Test)
+- Simpler initial setup
+- Manual backup responsibility
+- Single point of failure
+- Cost: Included in EC2 cost
+
+## Security Considerations
+1. **Security Groups**: Restrict to necessary ports only
+2. **SSH Key Pair**: Never use default keys, rotate regularly
+3. **Secrets Management**: Use AWS Secrets Manager or parameter store
+4. **VPC**: Deploy in custom VPC with private subnets if possible
+5. **IAM Roles**: Attach minimal required permissions
+6. **HTTPS**: Mandatory in production
+7. **JWT Secrets**: Strong, randomly generated, never committed to Git
+8. **Database**: Separate from app (RDS or isolated container)
+9. **Firewall Rules**: Only allow necessary traffic
+10. **Monitoring**: Enable CloudWatch logs and metrics
+
+## Disaster Recovery Checklist
+- [ ] Database backups automated (daily)
+- [ ] Application logs centralized (CloudWatch)
+- [ ] Health checks configured
+- [ ] Auto-scaling rules defined
+- [ ] Rollback procedure documented
+- [ ] DNS failover configured
+- [ ] Load balancer in front of app
+- [ ] Database replication enabled
+
+## Performance Optimization Tips
+1. **Caching**: Add Redis for products and sessions
+2. **Database**: Add read replicas for scaling
+3. **CDN**: Use CloudFront for static assets
+4. **Compression**: Enable gzip in Nginx
+5. **Connection Pooling**: Tune GORM pool settings
+6. **Database Indexing**: Optimize queries with indexes
+7. **Load Balancing**: Use AWS ALB for traffic distribution
+8. **Monitoring**: Set up CloudWatch alarms
+
+## Scaling Strategy
+### Phase 1: Single EC2 + RDS
+- Application on single EC2 instance
+- MySQL on AWS RDS
+- DNS with Route53
+- Load: ~1,000 concurrent users
+
+### Phase 2: Auto-scaling Group
+- Multiple EC2 instances behind ALB
+- Application load balancing
+- Session management via Redis
+- Load: ~10,000 concurrent users
+
+### Phase 3: Microservices
+- Separate services by domain
+- ECS/EKS orchestration
+- API Gateway
+- Load: ~100,000+ concurrent users
+
+## Backup and Disaster Recovery
+### Daily Backups
+```bash
+# Database
+aws rds create-db-snapshot --db-instance-identifier el-campeon-db
+
+# Application code
+aws s3 sync /app s3://el-campeon-backups/app/
+```
+
+### Restore Procedure
+```bash
+# From RDS snapshot
+aws rds restore-db-instance-from-db-snapshot \
+  --db-instance-identifier el-campeon-db-restored \
+  --db-snapshot-identifier <snapshot-id>
+
+# Redeploy application
+docker-compose up -d
+```
+
+## Monitoring and Alerts
+- **CloudWatch**: Application logs and metrics
+- **Health Checks**: HTTP /health endpoint
+- **Performance**: Database query logs
+- **Security**: VPC Flow Logs, CloudTrail
+- **Cost**: Budgets and billing alerts
+
+## Deployment Workflow
+1. Push code to GitHub
+2. SSH into EC2 instance
+3. Pull latest code: `git pull origin main`
+4. Update environment variables: Update .env file
+5. Rebuild Docker image: `docker-compose build`
+6. Restart services: `docker-compose up -d`
+7. Verify health: `curl https://your-domain.com/health`
+8. Monitor logs: `docker-compose logs -f`
+
+## Common Issues and Solutions
+### Issue: "Connection refused" to database
+- Check security group inbound rules
+- Verify database is running and healthy
+- Confirm credentials in environment variables
+
+### Issue: "Permission denied" on file operations
+- Ensure proper ownership and permissions
+- Use sudo if mounting volumes requires it
+- Check Docker daemon permissions
+
+### Issue: SSL Certificate errors
+- Verify certificate is valid and not expired
+- Check domain DNS records
+- Ensure certificate matches domain name
+
+### Issue: Out of disk space
+- Remove unused Docker images: `docker image prune -a`
+- Remove dangling volumes: `docker volume prune`
+- Check disk usage: `df -h`
+
+## Cost Estimation (Monthly)
+- EC2 t3.small: ~$8.50
+- RDS db.t3.micro: ~$15
+- Data transfer: ~$1
+- EBS storage: ~$1.50
+- SSL (ACM): Free
+- **Total**: ~$26/month (minimal production setup)
+
+## Post-Deployment Verification
+- [ ] Application accessible at domain
+- [ ] Health check returns 200
+- [ ] User registration/login working
+- [ ] JWT tokens valid for 24 hours
+- [ ] Product API returning data
+- [ ] Database connections stable
+- [ ] Logs readable in CloudWatch
+- [ ] Backups running automatically
+- [ ] SSL certificate valid
+- [ ] Load balancing working (if configured)
+
+## Next Steps After Deployment
+1. Monitor application for 24-48 hours
+2. Set up alerting for error rates and latency
+3. Configure auto-scaling based on metrics
+4. Plan database optimization
+5. Implement caching strategy
+6. Set up CI/CD pipeline (GitHub Actions, CodePipeline)
+7. Document runbooks for common operations
+8. Plan next infrastructure upgrade
+
+## Resources
+- [AWS EC2 Documentation](https://docs.aws.amazon.com/ec2/)
+- [AWS RDS Documentation](https://docs.aws.amazon.com/rds/)
+- [Docker Documentation](https://docs.docker.com/)
+- [Gin Framework Documentation](https://gin-gonic.com/)
+- [GORM Documentation](https://gorm.io/)
+- [JWT Best Practices](https://tools.ietf.org/html/rfc8725)
+
+## Support and Troubleshooting
+- Check CloudWatch logs for errors
+- SSH into instance for direct debugging
+- Verify security group rules
+- Review Docker Compose logs
+- Check AWS account limits and quotas
+- Monitor AWS billing for unexpected charges
+
+---
+
+**Last Updated**: May 2026
+**Version**: 1.0
+**Status**: Production Ready
+
