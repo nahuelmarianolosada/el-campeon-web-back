@@ -715,6 +715,64 @@ server {
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
 }
 ```
+```
+# HTTP Server (Sin SSL, acceso directo por IP) - ESTE ES EL QUE FUNCIONA CON AMBOS SERVICIOS (FRONT & BACK)
+server {
+    listen 80;
+    listen [::]:80;
+    server_name _;  # Acepta cualquier servidor
+
+
+    # =========================
+    # FRONTEND (React)
+    # =========================
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+
+        proxy_http_version 1.1;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_cache_bypass $http_upgrade;
+    }
+
+
+    # Proxy reverso a la app
+    # =========================
+    # BACKEND API (Go)
+    # =========================
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # Logs
+    access_log /var/log/nginx/el-campeon-access.log;
+    error_log /var/log/nginx/el-campeon-error.log;
+
+    # Compresión
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+}
+```
 
 ### Paso 2: Habilitar Configuración
 
