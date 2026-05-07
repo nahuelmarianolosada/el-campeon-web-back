@@ -5,7 +5,6 @@ import (
 	"log"
 
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/config"
-	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
@@ -22,19 +21,6 @@ func Initialize(cfg *config.Config) (*gorm.DB, error) {
 
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		return nil, err
-	}
-
-	// Auto-migrate all models
-	if err := db.AutoMigrate(
-		&models.User{},
-		&models.Product{},
-		&models.Cart{},
-		&models.CartItem{},
-		&models.Order{},
-		&models.OrderItem{},
-		&models.Payment{},
-	); err != nil {
 		return nil, err
 	}
 
