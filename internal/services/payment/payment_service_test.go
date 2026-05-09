@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	orderMp "github.com/mercadopago/sdk-go/pkg/order"
+	preferenceMp "github.com/mercadopago/sdk-go/pkg/preference"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/config"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
 	orderStatus "github.com/nahuelmarianolosada/el-campeon-web/internal/services/order/status"
@@ -20,20 +20,12 @@ type MockMercadopagoClient struct {
 	mock.Mock
 }
 
-func (m *MockMercadopagoClient) CreatePayment(ctx context.Context, req orderMp.Request) (*orderMp.Response, error) {
+func (m *MockMercadopagoClient) CreatePreference(ctx context.Context, req preferenceMp.Request) (*preferenceMp.Response, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*orderMp.Response), args.Error(1)
-}
-
-func (m *MockMercadopagoClient) CancelPayment(ctx context.Context, paymentID int) (*orderMp.Response, error) {
-	args := m.Called(ctx, paymentID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*orderMp.Response), args.Error(1)
+	return args.Get(0).(*preferenceMp.Response), args.Error(1)
 }
 
 type MockPaymentRepository struct {
@@ -167,8 +159,9 @@ func TestCreatePayment(t *testing.T) {
 	ctx := context.Background()
 
 	req := &models.CreatePaymentRequest{
-		OrderID: 1,
-		Amount:  100.0,
+		OrderID:       1,
+		Amount:        100.0,
+		PaymentMethod: "MP_CARD",
 	}
 
 	order := &models.Order{
@@ -193,14 +186,14 @@ func TestCreatePayment(t *testing.T) {
 		},
 	}
 
-	t.Run("Success", func(t *testing.T) {
+	t.Run("SuccessMPCard", func(t *testing.T) {
 		orderRepo.On("FindByID", uint(1)).Return(order, nil).Once()
 
-		// Setup the mock Mercadopago client to return a successful payment response
-		mockPaymentResponse := &orderMp.Response{
+		// Setup the mock Mercadopago client to return a successful preference response
+		mockPaymentResponse := &preferenceMp.Response{
 			ID: "123456",
 		}
-		mpClient.On("CreatePayment", mock.Anything, mock.Anything).Return(mockPaymentResponse, nil).Once()
+		mpClient.On("CreatePreference", mock.Anything, mock.Anything).Return(mockPaymentResponse, nil).Once()
 
 		paymentRepo.On("Create", mock.AnythingOfType("*models.Payment")).Return(nil).Once()
 		paymentRepo.On("Update", mock.AnythingOfType("*models.Payment")).Return(nil).Once()
@@ -213,11 +206,36 @@ func TestCreatePayment(t *testing.T) {
 		assert.Equal(t, req.OrderID, resp.OrderID)
 		assert.Equal(t, order.UserID, resp.UserID)
 		assert.Equal(t, req.Amount, resp.Amount)
-		assert.Equal(t, paymentStatus.Approved, resp.Status)
+		assert.Equal(t, paymentStatus.Pending, resp.Status)
 		assert.Equal(t, "123456", resp.MercadopagoPreferenceID)
+		assert.Equal(t, "MP_CARD", resp.PaymentMethod)
 		paymentRepo.AssertExpectations(t)
 		orderRepo.AssertExpectations(t)
 		mpClient.AssertExpectations(t)
+	})
+
+	t.Run("SuccessCash", func(t *testing.T) {
+		freshRepo := new(MockPaymentRepository)
+		freshOrderRepo := new(MockOrderRepository)
+		freshService := NewPaymentService(freshRepo, freshOrderRepo, nil)
+
+		reqCash := &models.CreatePaymentRequest{
+			OrderID:       1,
+			Amount:        100.0,
+			PaymentMethod: "CASH",
+		}
+
+		freshOrderRepo.On("FindByID", uint(1)).Return(order, nil).Once()
+		freshRepo.On("Create", mock.AnythingOfType("*models.Payment")).Return(nil).Once()
+		freshRepo.On("Update", mock.AnythingOfType("*models.Payment")).Return(nil).Once()
+
+		resp, err := freshService.CreatePayment(ctx, reqCash)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, "CASH", resp.PaymentMethod)
+		assert.Equal(t, paymentStatus.Pending, resp.Status)
+		freshRepo.AssertExpectations(t)
 	})
 
 	t.Run("OrderNotFound", func(t *testing.T) {
@@ -245,7 +263,7 @@ func TestCreatePayment(t *testing.T) {
 
 	t.Run("AmountMismatch", func(t *testing.T) {
 		orderRepo.On("FindByID", uint(1)).Return(order, nil).Once()
-		reqMismatch := &models.CreatePaymentRequest{OrderID: 1, Amount: 50.0}
+		reqMismatch := &models.CreatePaymentRequest{OrderID: 1, Amount: 50.0, PaymentMethod: "MP_CARD"}
 
 		resp, err := service.CreatePayment(ctx, reqMismatch)
 

@@ -17,7 +17,7 @@ type Payment struct {
 	Amount                  float64           `gorm:"not null" json:"amount"`
 	Currency                string            `gorm:"default:'ARS'" json:"currency"`
 	Status                  string            `gorm:"type:ENUM('PENDING','APPROVED','REJECTED','CANCELLED','REFUNDED');default:'PENDING'" json:"status"`
-	PaymentMethod           string            `gorm:"type:ENUM('CREDIT_CARD','DEBIT_CARD','BANK_TRANSFER','MERCADOPAGO');default:'MERCADOPAGO'" json:"payment_method"`
+	PaymentMethod           string            `gorm:"type:ENUM('MP_SAVED','MP_INSTALLMENTS','MP_CARD','CASH');default:'MP_CARD'" json:"payment_method"`
 	MercadopagoPreferenceID string            `json:"mercadopago_preference_id"`
 	MercadopagoPaymentID    string            `json:"mercadopago_payment_id"`
 	MercadopagoData         datatypes.JSONMap `gorm:"type:JSON" json:"mercadopago_data"`
@@ -29,8 +29,9 @@ type Payment struct {
 }
 
 type CreatePaymentRequest struct {
-	OrderID uint    `json:"order_id" binding:"required"`
-	Amount  float64 `json:"amount" binding:"required,gt=0"`
+	OrderID       uint   `json:"order_id" binding:"required"`
+	Amount        float64 `json:"amount" binding:"required,gt=0"`
+	PaymentMethod string `json:"payment_method" binding:"required,oneof=MP_SAVED MP_INSTALLMENTS MP_CARD CASH"`
 }
 
 type PaymentResponse struct {

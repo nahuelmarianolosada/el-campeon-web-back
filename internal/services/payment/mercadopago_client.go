@@ -3,27 +3,24 @@ package payment
 import (
 	"context"
 
-	orderMp "github.com/mercadopago/sdk-go/pkg/order"
+	preferenceMp "github.com/mercadopago/sdk-go/pkg/preference"
 )
 
 // MercadopagoClient interface para abstraer el cliente de MercadoPago
 type MercadopagoClient interface {
-	CreatePayment(ctx context.Context, req orderMp.Request) (*orderMp.Response, error)
+	CreatePreference(ctx context.Context, req preferenceMp.Request) (*preferenceMp.Response, error)
 }
 
 // DefaultMercadopagoClient implementa MercadopagoClient usando el SDK oficial
 type DefaultMercadopagoClient struct {
-	client orderMp.Client
+	client preferenceMp.Client
 }
 
-func NewDefaultMercadopagoClient(client orderMp.Client) MercadopagoClient {
+func NewDefaultMercadopagoClient(client preferenceMp.Client) MercadopagoClient {
 	return &DefaultMercadopagoClient{client: client}
 }
 
-func (c *DefaultMercadopagoClient) CreatePayment(ctx context.Context, req orderMp.Request) (*orderMp.Response, error) {
+func (c *DefaultMercadopagoClient) CreatePreference(ctx context.Context, req preferenceMp.Request) (*preferenceMp.Response, error) {
 	return c.client.Create(ctx, req)
 }
 
-func (c *DefaultMercadopagoClient) CancelPayment(ctx context.Context, paymentID string) (*orderMp.Response, error) {
-	return c.client.Cancel(ctx, paymentID)
-}
