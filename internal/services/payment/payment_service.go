@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/mercadopago/sdk-go/pkg/config"
-	orderMp "github.com/mercadopago/sdk-go/pkg/order"
+	preferenceMp "github.com/mercadopago/sdk-go/pkg/preference"
 	internalConfig "github.com/nahuelmarianolosada/el-campeon-web/internal/config"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/repositories"
@@ -90,14 +90,25 @@ func (s *paymentService) CreatePayment(ctx context.Context, req *models.CreatePa
 		Amount:        req.Amount,
 		Currency:      "ARS",
 		Status:        paymentStatus.Pending,
-		PaymentMethod: "MERCADOPAGO",
+		PaymentMethod: req.PaymentMethod,
 	}
 
 	if err := s.paymentRepo.Create(payment); err != nil {
 		return nil, fmt.Errorf("error creating payment: %w", err)
 	}
 
-	executedPayment, err := s.ExecutePayment(ctx, *order)
+	// Para pagos en efectivo, marcar como pendiente de confirmación
+	if req.PaymentMethod == "CASH" {
+		payment.Status = paymentStatus.Pending
+		// No procesamos con MercadoPago para pagos en efectivo
+		if err := s.paymentRepo.Update(payment); err != nil {
+			return nil, fmt.Errorf("error updating payment: %w", err)
+		}
+		return s.toPaymentResponse(payment), nil
+	}
+
+	// Para pagos con MercadoPago, crear preference
+	executedPayment, err := s.ExecutePayment(ctx, *order, req.PaymentMethod)
 	if err != nil {
 		return nil, fmt.Errorf("error executing payment: %w", err)
 	}
@@ -111,12 +122,13 @@ func (s *paymentService) CreatePayment(ctx context.Context, req *models.CreatePa
 	payment.MercadopagoData = datatypes.JSONMap{
 		"preference": string(executedPaymentByte),
 	}
-	payment.Status = paymentStatus.Approved
+	payment.Status = paymentStatus.Pending // En Mercado Pago, el pago sigue siendo PENDING hasta confirmación de webhook
 
 	if err := s.paymentRepo.Update(payment); err != nil {
 		return nil, fmt.Errorf("error updating payment with MP data: %w", err)
 	}
 
+	// Actualizar orden a CONFIRMED
 	order.Status = orderStatus.Confirmed
 	order.UpdatedAt = time.Now()
 	if err := s.orderRepo.Update(order); err != nil {
@@ -126,50 +138,37 @@ func (s *paymentService) CreatePayment(ctx context.Context, req *models.CreatePa
 	return s.toPaymentResponse(payment), nil
 }
 
-func (s *paymentService) ExecutePayment(ctx context.Context, order models.Order) (*orderMp.Response, error) {
+func (s *paymentService) ExecutePayment(ctx context.Context, order models.Order, paymentMethod string) (*preferenceMp.Response, error) {
 	// If no client is set, create a default one
 	if s.mercadopagoClient == nil {
 		cfg, err := config.New(s.config.MercadopagoAccessToken)
 		if err != nil {
 			return nil, fmt.Errorf("mp config error: %w", err)
 		}
-		client := orderMp.NewClient(cfg)
+		client := preferenceMp.NewClient(cfg)
 		s.mercadopagoClient = NewDefaultMercadopagoClient(client)
 	}
 
-	var items []orderMp.ItemsRequest
+	var items []preferenceMp.ItemRequest
 	for _, item := range order.Items {
-		items = append(items, orderMp.ItemsRequest{
+		items = append(items, preferenceMp.ItemRequest{
 			Title:       item.Product.Name,
 			Quantity:    item.Quantity,
-			UnitPrice:   fmt.Sprintf("%.2f", item.Price),
+			UnitPrice:   item.Price,
 			Description: item.Product.Description,
 		})
 	}
 
-	request := orderMp.Request{
-		Type:              "online",
-		TotalAmount:       fmt.Sprintf("%.2f", order.Total),
-		ExternalReference: order.OrderNumber,
-		Currency:          "ARS",
+	request := preferenceMp.Request{
 		Items:             items,
-		Transactions: &orderMp.TransactionRequest{
-			Payments: []orderMp.PaymentRequest{
-				{
-					Amount: fmt.Sprintf("%.2f", order.Total),
-				},
-			},
-		},
-		Payer: &orderMp.PayerRequest{
-			Email:      order.User.Email,
-			FirstName:  order.User.FirstName,
-			LastName:   order.User.LastName,
-			CustomerID: fmt.Sprintf("%d", order.UserID),
-			EntityType: "individual",
+		ExternalReference: order.OrderNumber,
+		Payer: &preferenceMp.PayerRequest{
+			Email: order.User.Email,
+			Name:  order.User.FirstName + " " + order.User.LastName,
 		},
 	}
 
-	paymentCreated, err := s.mercadopagoClient.CreatePayment(ctx, request)
+	paymentCreated, err := s.mercadopagoClient.CreatePreference(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("mercadopago api error: %w", err)
 	}

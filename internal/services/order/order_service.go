@@ -75,6 +75,7 @@ func (s *orderService) CreateOrder(userID uint, req *models.CreateOrderRequest) 
 		Tax:             tax,
 		Total:           total,
 		ShippingAddress: shippingData,
+		DeliveryMethod:  req.DeliveryMethod,
 		Notes:           req.Notes,
 	}
 
@@ -178,6 +179,7 @@ func (s *orderService) getOrderResponse(order *models.Order) *models.OrderRespon
 		Tax:             order.Tax,
 		Total:           order.Total,
 		ShippingAddress: order.ShippingAddress,
+		DeliveryMethod:  order.DeliveryMethod,
 		Notes:           order.Notes,
 		CreatedAt:       order.CreatedAt,
 		UpdatedAt:       order.UpdatedAt,

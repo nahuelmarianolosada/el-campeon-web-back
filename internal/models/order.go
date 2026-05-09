@@ -18,6 +18,7 @@ type Order struct {
 	Tax             float64           `gorm:"not null;default:0" json:"tax"`
 	Total           float64           `gorm:"not null" json:"total"`
 	ShippingAddress datatypes.JSONMap `gorm:"type:JSON" json:"shipping_address"`
+	DeliveryMethod  string            `gorm:"type:ENUM('shipping','pickup-libreria','pickup-jugueteria');default:'shipping'" json:"delivery_method"`
 	Notes           string            `gorm:"type:text" json:"notes"`
 	CreatedAt       time.Time         `json:"created_at"`
 	UpdatedAt       time.Time         `json:"updated_at"`
@@ -36,6 +37,7 @@ type OrderItem struct {
 
 type CreateOrderRequest struct {
 	ShippingAddress map[string]interface{} `json:"shipping_address" binding:"required"`
+	DeliveryMethod  string                 `json:"delivery_method" binding:"required,oneof=shipping pickup-libreria pickup-jugueteria"`
 	Notes           string                 `json:"notes"`
 }
 
@@ -49,6 +51,7 @@ type OrderResponse struct {
 	Tax             float64                `json:"tax"`
 	Total           float64                `json:"total"`
 	ShippingAddress map[string]interface{} `json:"shipping_address"`
+	DeliveryMethod  string                 `json:"delivery_method"`
 	Notes           string                 `json:"notes"`
 	CreatedAt       time.Time              `json:"created_at"`
 	UpdatedAt       time.Time              `json:"updated_at"`
