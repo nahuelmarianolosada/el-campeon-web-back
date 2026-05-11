@@ -220,6 +220,14 @@ type MockPaymentRepository struct {
 	mock.Mock
 }
 
+func (m *MockPaymentRepository) FindByMercadopagoPaymentID(mercadopagoPaymentID string) (*models.Payment, error) {
+	args := m.Called(mercadopagoPaymentID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Payment), args.Error(1)
+}
+
 func (m *MockPaymentRepository) Create(payment *models.Payment) error {
 	args := m.Called(payment)
 	return args.Error(0)

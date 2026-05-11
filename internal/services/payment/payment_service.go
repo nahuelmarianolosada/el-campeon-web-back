@@ -22,15 +22,16 @@ type PaymentService interface {
 	GetPaymentsByUserID(userID uint, limit, offset int) ([]models.PaymentResponse, error)
 	GetPaymentByOrderID(orderID uint) (*models.PaymentResponse, error)
 	UpdatePaymentStatus(paymentID uint, status string) (*models.PaymentResponse, error)
-	ProcessMercadopagoWebhook(webhook *models.MercadopagoWebhookRequest) error
+	ProcessMercadopagoWebhook(ctx context.Context, webhook *models.MercadopagoWebhookRequest, xSignature string) error
 	ListAllPayments(limit, offset int) ([]models.PaymentResponse, error)
 }
 
 type paymentService struct {
-	paymentRepo       repositories.PaymentRepository
-	orderRepo         repositories.OrderRepository
-	config            *internalConfig.Config
-	mercadopagoClient MercadopagoClient
+	paymentRepo         repositories.PaymentRepository
+	orderRepo           repositories.OrderRepository
+	config              *internalConfig.Config
+	mercadopagoClient   MercadopagoClient
+	webhookValidator    *WebhookValidator
 }
 
 func NewPaymentService(
@@ -38,11 +39,16 @@ func NewPaymentService(
 	orderRepo repositories.OrderRepository,
 	cfg *internalConfig.Config,
 ) PaymentService {
+	validator := &WebhookValidator{}
+	if cfg != nil {
+		validator = NewWebhookValidator(cfg.MercadopagoPublicKey)
+	}
 	return &paymentService{
-		paymentRepo:       paymentRepo,
-		orderRepo:         orderRepo,
-		config:            cfg,
+		paymentRepo:      paymentRepo,
+		orderRepo:        orderRepo,
+		config:           cfg,
 		mercadopagoClient: nil, // Will be set via SetMercadopagoClient or use default
+		webhookValidator: validator,
 	}
 }
 
@@ -52,11 +58,16 @@ func NewPaymentServiceWithClient(
 	cfg *internalConfig.Config,
 	client MercadopagoClient,
 ) PaymentService {
+	validator := &WebhookValidator{}
+	if cfg != nil {
+		validator = NewWebhookValidator(cfg.MercadopagoPublicKey)
+	}
 	return &paymentService{
 		paymentRepo:       paymentRepo,
 		orderRepo:         orderRepo,
 		config:            cfg,
 		mercadopagoClient: client,
+		webhookValidator: validator,
 	}
 }
 
@@ -146,7 +157,7 @@ func (s *paymentService) ExecutePayment(ctx context.Context, order models.Order,
 			return nil, fmt.Errorf("mp config error: %w", err)
 		}
 		client := preferenceMp.NewClient(cfg)
-		s.mercadopagoClient = NewDefaultMercadopagoClient(client)
+		s.mercadopagoClient = NewDefaultMercadopagoClient(client, s.config.MercadopagoAccessToken)
 	}
 
 	var items []preferenceMp.ItemRequest
@@ -159,13 +170,16 @@ func (s *paymentService) ExecutePayment(ctx context.Context, order models.Order,
 		})
 	}
 
+	var payer preferenceMp.PayerRequest
+	if order.User != nil {
+		payer.Email = order.User.Email
+		payer.Name = order.User.FirstName + " " + order.User.LastName
+	}
+
 	request := preferenceMp.Request{
 		Items:             items,
 		ExternalReference: order.OrderNumber,
-		Payer: &preferenceMp.PayerRequest{
-			Email: order.User.Email,
-			Name:  order.User.FirstName + " " + order.User.LastName,
-		},
+		Payer: &payer,
 	}
 
 	paymentCreated, err := s.mercadopagoClient.CreatePreference(ctx, request)
@@ -239,22 +253,121 @@ func (s *paymentService) UpdatePaymentStatus(paymentID uint, status string) (*mo
 }
 
 // ProcessMercadopagoWebhook procesa webhooks de MercadoPago
-// En producción, aquí se verificaría la firma del webhook y se integraría con MP SDK
-func (s *paymentService) ProcessMercadopagoWebhook(webhook *models.MercadopagoWebhookRequest) error {
+// Realiza validación de firma, obtiene detalles del pago desde MP API
+// y actualiza los estados de pago y orden
+func (s *paymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook *models.MercadopagoWebhookRequest, xSignature string) error {
+	// 1. Validar que sea un webhook de pago
 	if webhook.Type != "payment" {
 		return nil // Ignorar otros tipos de eventos
 	}
 
-	// En una implementación real:
-	// 1. Verificar la firma del webhook
-	// 2. Consultar el estado del pago en MercadoPago API
-	// 3. Actualizar el perfil del pago con los datos de MP
-	// 4. Actualizar el estado basado en la respuesta de MP
+	// 2. Validar la firma del webhook
+	if !s.webhookValidator.ValidateSignature(xSignature, webhook.Type, webhook.Data.ID, s.config.MercadopagoAccessToken) {
+		return fmt.Errorf("invalid webhook signature")
+	}
 
-	// Por ahora, esto es un placeholder
-	fmt.Printf("Received webhook for payment %s with action %s\n", webhook.Data.ID, webhook.Action)
+	// 3. Obtener los detalles completos del pago desde MercadoPago API
+	paymentDetails, err := s.mercadopagoClient.GetPaymentDetails(ctx, webhook.Data.ID)
+	if err != nil {
+		return fmt.Errorf("error fetching payment details from mercadopago: %w", err)
+	}
 
+	// 4. Buscar el pago local usando el MercadopagoPaymentID
+	payment, err := s.paymentRepo.FindByMercadopagoPaymentID(fmt.Sprintf("%d", paymentDetails.ID))
+	if err != nil {
+		return fmt.Errorf("error finding payment: %w", err)
+	}
+
+	// 5. Verificar que los montos coincidan
+	if paymentDetails.TransactionAmount != payment.Amount {
+		return fmt.Errorf("payment amount mismatch: expected %.2f, got %.2f", payment.Amount, paymentDetails.TransactionAmount)
+	}
+
+	// 6. Mapear el estado de MercadoPago a nuestro estado local
+	newStatus := mapMercadopagoStatusToLocalStatus(paymentDetails.Status)
+	rejectedReason := ""
+
+	// 7. Actualizar el pago con los detalles de MercadoPago
+	payment.MercadopagoPaymentID = fmt.Sprintf("%d", paymentDetails.ID)
+	payment.Status = newStatus
+
+	// Si fue rechazado, guardar el motivo
+	if paymentDetails.Status == "rejected" {
+		rejectedReason = paymentDetails.StatusDetail
+		payment.RejectedReason = rejectedReason
+	}
+
+	// Si fue aprobado, establecer la fecha de aprobación
+	if paymentDetails.Status == "approved" {
+		now := time.Now()
+		payment.ApprovedAt = &now
+	}
+
+	// Guardar los datos completos de MercadoPago
+	mpDataBytes, err := json.Marshal(paymentDetails)
+	if err != nil {
+		return fmt.Errorf("error marshaling payment details: %w", err)
+	}
+
+	payment.MercadopagoData = datatypes.JSONMap{
+		"payment_details": string(mpDataBytes),
+		"webhook_received": time.Now().Format(time.RFC3339),
+	}
+
+	// 8. Actualizar el pago en la base de datos
+	if err := s.paymentRepo.Update(payment); err != nil {
+		return fmt.Errorf("error updating payment: %w", err)
+	}
+
+	// 9. Actualizar el estado de la orden según el estado del pago
+	order, err := s.orderRepo.FindByID(payment.OrderID)
+	if err != nil {
+		return fmt.Errorf("error finding order: %w", err)
+	}
+
+	switch newStatus {
+	case paymentStatus.Approved:
+		// Cambiar orden a CONFIRMED
+		order.Status = orderStatus.Confirmed
+	case paymentStatus.Rejected:
+		// Cambiar orden a CANCELLED
+		order.Status = orderStatus.Cancelled
+	case paymentStatus.Refunded:
+		// Cambiar orden a CANCELLED
+		order.Status = orderStatus.Cancelled
+	}
+
+	order.UpdatedAt = time.Now()
+	if err := s.orderRepo.Update(order); err != nil {
+		return fmt.Errorf("error updating order status: %w", err)
+	}
+
+	fmt.Printf("Successfully processed webhook for payment ID %s, status: %s\n", webhook.Data.ID, newStatus)
 	return nil
+}
+
+// mapMercadopagoStatusToLocalStatus mapea los estados de MercadoPago a nuestros estados locales
+func mapMercadopagoStatusToLocalStatus(mpStatus string) string {
+	switch mpStatus {
+	case "approved":
+		return paymentStatus.Approved
+	case "rejected":
+		return paymentStatus.Rejected
+	case "refunded":
+		return paymentStatus.Refunded
+	case "charged_back":
+		return paymentStatus.Rejected // Tratar como rechazado
+	case "pending":
+		return paymentStatus.Pending
+	case "cancelled":
+		return paymentStatus.Cancelled
+	case "in_process":
+		return paymentStatus.Pending
+	case "in_mediation":
+		return paymentStatus.Pending
+	default:
+		return paymentStatus.Pending
+	}
 }
 
 func (s *paymentService) ListAllPayments(limit, offset int) ([]models.PaymentResponse, error) {
