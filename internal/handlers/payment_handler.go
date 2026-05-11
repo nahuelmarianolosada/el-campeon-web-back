@@ -229,9 +229,15 @@ func (h *PaymentHandler) ListAllPayments(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body models.MercadopagoWebhookRequest true "Webhook de MercadoPago"
+// @Header 200 {string} X-Signature "Firma del webhook"
 // @Success 200 {object} gin.H
+// @Failure 400 {object} gin.H
+// @Failure 401 {object} gin.H
+// @Failure 500 {object} gin.H
 // @Router /webhooks/mercadopago [post]
 func (h *PaymentHandler) MercadopagoWebhook(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	var webhook models.MercadopagoWebhookRequest
 
 	if err := c.ShouldBindJSON(&webhook); err != nil {
@@ -239,7 +245,15 @@ func (h *PaymentHandler) MercadopagoWebhook(c *gin.Context) {
 		return
 	}
 
-	if err := h.paymentService.ProcessMercadopagoWebhook(&webhook); err != nil {
+	// Obtener el header de firma
+	xSignature := c.GetHeader("X-Signature")
+	if xSignature == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Signature header"})
+		return
+	}
+
+	// Procesar el webhook
+	if err := h.paymentService.ProcessMercadopagoWebhook(ctx, &webhook, xSignature); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

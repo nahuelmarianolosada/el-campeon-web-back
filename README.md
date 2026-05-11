@@ -134,10 +134,10 @@ go run ./cmd/main.go
 
 ## 📚 Documentación
 
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Descripción detallada de la arquitectura
-- **[DATABASE.md](./DATABASE.md)** - Esquema de base de datos y relaciones
-- **[API.md](./API.md)** - Especificación completa de endpoints REST
-- **[SETUP.md](./SETUP.md)** - Guía paso a paso de instalación
+- **[ARCHITECTURE.md](docs/basic/ARCHITECTURE.md)** - Descripción detallada de la arquitectura
+- **[DATABASE.md](docs/basic/DATABASE.md)** - Esquema de base de datos y relaciones
+- **[API.md](docs/basic/API.md)** - Especificación completa de endpoints REST
+- **[SETUP.md](docs/basic/SETUP.md)** - Guía paso a paso de instalación
 
 ## 🧪 Testing
 
