@@ -27,11 +27,11 @@ type PaymentService interface {
 }
 
 type paymentService struct {
-	paymentRepo         repositories.PaymentRepository
-	orderRepo           repositories.OrderRepository
-	config              *internalConfig.Config
-	mercadopagoClient   MercadopagoClient
-	webhookValidator    *WebhookValidator
+	paymentRepo       repositories.PaymentRepository
+	orderRepo         repositories.OrderRepository
+	config            *internalConfig.Config
+	mercadopagoClient MercadopagoClient
+	webhookValidator  *WebhookValidator
 }
 
 func NewPaymentService(
@@ -44,11 +44,11 @@ func NewPaymentService(
 		validator = NewWebhookValidator(cfg.MercadopagoPublicKey)
 	}
 	return &paymentService{
-		paymentRepo:      paymentRepo,
-		orderRepo:        orderRepo,
-		config:           cfg,
+		paymentRepo:       paymentRepo,
+		orderRepo:         orderRepo,
+		config:            cfg,
 		mercadopagoClient: nil, // Will be set via SetMercadopagoClient or use default
-		webhookValidator: validator,
+		webhookValidator:  validator,
 	}
 }
 
@@ -67,7 +67,7 @@ func NewPaymentServiceWithClient(
 		orderRepo:         orderRepo,
 		config:            cfg,
 		mercadopagoClient: client,
-		webhookValidator: validator,
+		webhookValidator:  validator,
 	}
 }
 
@@ -177,9 +177,10 @@ func (s *paymentService) ExecutePayment(ctx context.Context, order models.Order,
 	}
 
 	request := preferenceMp.Request{
-		Items:             items,
-		ExternalReference: order.OrderNumber,
-		Payer: &payer,
+		Items:               items,
+		ExternalReference:   order.OrderNumber,
+		Payer:               &payer,
+		StatementDescriptor: fmt.Sprintf("Campeon %s", order.OrderNumber),
 	}
 
 	paymentCreated, err := s.mercadopagoClient.CreatePreference(ctx, request)
@@ -266,6 +267,16 @@ func (s *paymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook 
 		return fmt.Errorf("invalid webhook signature")
 	}
 
+	// 2.5. Inicializar cliente si no existe
+	if s.mercadopagoClient == nil {
+		cfg, err := config.New(s.config.MercadopagoAccessToken)
+		if err != nil {
+			return fmt.Errorf("mp config error: %w", err)
+		}
+		client := preferenceMp.NewClient(cfg)
+		s.mercadopagoClient = NewDefaultMercadopagoClient(client, s.config.MercadopagoAccessToken)
+	}
+
 	// 3. Obtener los detalles completos del pago desde MercadoPago API
 	paymentDetails, err := s.mercadopagoClient.GetPaymentDetails(ctx, webhook.Data.ID)
 	if err != nil {
@@ -273,7 +284,7 @@ func (s *paymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook 
 	}
 
 	// 4. Buscar el pago local usando el MercadopagoPaymentID
-	payment, err := s.paymentRepo.FindByMercadopagoPaymentID(fmt.Sprintf("%d", paymentDetails.ID))
+	payment, err := s.paymentRepo.FindByOrderNumber(paymentDetails.ExternalReference)
 	if err != nil {
 		return fmt.Errorf("error finding payment: %w", err)
 	}
@@ -310,7 +321,7 @@ func (s *paymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook 
 	}
 
 	payment.MercadopagoData = datatypes.JSONMap{
-		"payment_details": string(mpDataBytes),
+		"payment_details":  string(mpDataBytes),
 		"webhook_received": time.Now().Format(time.RFC3339),
 	}
 
