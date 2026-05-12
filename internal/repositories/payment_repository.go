@@ -11,6 +11,7 @@ type PaymentRepository interface {
 	FindByTransactionID(transactionID string) (*models.Payment, error)
 	FindByOrderID(orderID uint) (*models.Payment, error)
 	FindByMercadopagoPaymentID(mercadopagoPaymentID string) (*models.Payment, error)
+	FindByOrderNumber(orderNumber string) (*models.Payment, error)
 	Update(payment *models.Payment) error
 	FindByUserID(userID uint, limit, offset int) ([]models.Payment, error)
 	ListAll(limit, offset int) ([]models.Payment, error)
@@ -56,6 +57,14 @@ func (r *paymentRepository) FindByOrderID(orderID uint) (*models.Payment, error)
 func (r *paymentRepository) FindByMercadopagoPaymentID(mercadopagoPaymentID string) (*models.Payment, error) {
 	var payment models.Payment
 	if err := r.db.Where("mercadopago_payment_id = ?", mercadopagoPaymentID).First(&payment).Error; err != nil {
+		return nil, err
+	}
+	return &payment, nil
+}
+
+func (r *paymentRepository) FindByOrderNumber(orderNumber string) (*models.Payment, error) {
+	var payment models.Payment
+	if err := r.db.Joins("Order").Where("`Order`.order_number = ?", orderNumber).First(&payment).Error; err != nil {
 		return nil, err
 	}
 	return &payment, nil

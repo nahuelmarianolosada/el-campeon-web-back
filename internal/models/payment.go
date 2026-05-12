@@ -29,9 +29,9 @@ type Payment struct {
 }
 
 type CreatePaymentRequest struct {
-	OrderID       uint   `json:"order_id" binding:"required"`
+	OrderID       uint    `json:"order_id" binding:"required"`
 	Amount        float64 `json:"amount" binding:"required,gt=0"`
-	PaymentMethod string `json:"payment_method" binding:"required,oneof=MP_SAVED MP_INSTALLMENTS MP_CARD CASH"`
+	PaymentMethod string  `json:"payment_method" binding:"required,oneof=MP_SAVED MP_INSTALLMENTS MP_CARD CASH"`
 }
 
 type PaymentResponse struct {
@@ -52,13 +52,13 @@ type PaymentResponse struct {
 
 // MercadopagoWebhookRequest estructura para recibir webhooks de MercadoPago
 type MercadopagoWebhookRequest struct {
-	ID          string    `json:"id"`
-	Type        string    `json:"type"`
-	Action      string    `json:"action"`
-	APIVersion  string    `json:"api_version"`
-	DateCreated string    `json:"date_created"`
-	LiveMode    bool      `json:"live_mode"`
-	UserID      string    `json:"user_id"`
+	ID          int    `json:"id"`
+	Type        string `json:"type"`
+	Action      string `json:"action"`
+	APIVersion  string `json:"api_version"`
+	DateCreated string `json:"date_created"`
+	LiveMode    bool   `json:"live_mode"`
+	UserID      string `json:"user_id"`
 	Data        struct {
 		ID string `json:"id"`
 	} `json:"data"`
@@ -66,17 +66,16 @@ type MercadopagoWebhookRequest struct {
 
 // MercadopagoPaymentDetailsResponse estructura para la respuesta de detalles del pago de MP
 type MercadopagoPaymentDetailsResponse struct {
-	ID               int64   `json:"id"`
-	Status           string  `json:"status"` // approved, rejected, pending, cancelled, refunded, charged_back
-	StatusDetail     string  `json:"status_detail"`
+	ID                int64   `json:"id"`
+	Status            string  `json:"status"` // approved, rejected, pending, cancelled, refunded, charged_back
+	StatusDetail      string  `json:"status_detail"`
 	TransactionAmount float64 `json:"transaction_amount"`
 	Currency          string  `json:"currency_id"`
-	PaymentMethod    struct {
+	PaymentMethod     struct {
 		ID   string `json:"id"`
 		Type string `json:"type"`
 	} `json:"payment_method"`
-	DateCreated      string `json:"date_created"`
-	DateLastModified string `json:"date_last_modified"`
+	DateCreated       string `json:"date_created"`
+	DateLastModified  string `json:"date_last_modified"`
 	ExternalReference string `json:"external_reference"`
 }
-

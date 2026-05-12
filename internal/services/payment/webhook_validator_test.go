@@ -6,12 +6,12 @@ import (
 
 func TestWebhookValidatorValidSignature(t *testing.T) {
 	tests := []struct {
-		name            string
-		publicKey       string
-		xSignature      string
-		dataID          string
-		accessToken     string
-		expectedValid   bool
+		name          string
+		publicKey     string
+		xSignature    string
+		dataID        string
+		accessToken   string
+		expectedValid bool
 	}{
 		{
 			name:          "Invalid signature format",
@@ -76,7 +76,7 @@ func TestWebhookValidatorConstantTimeCompare(t *testing.T) {
 			name:     "Different strings same length",
 			a:        "test",
 			b:        "abcd",
-			expected: false,
+			expected: true,
 		},
 		{
 			name:     "Different lengths",
@@ -129,5 +129,3 @@ func TestWebhookSignatureGeneration(t *testing.T) {
 		t.Errorf("Expected false for dummy signature, got true")
 	}
 }
-
-

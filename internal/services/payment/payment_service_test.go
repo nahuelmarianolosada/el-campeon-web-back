@@ -77,6 +77,14 @@ func (m *MockPaymentRepository) FindByMercadopagoPaymentID(mercadopagoPaymentID 
 	return args.Get(0).(*models.Payment), args.Error(1)
 }
 
+func (m *MockPaymentRepository) FindByOrderNumber(orderNumber string) (*models.Payment, error) {
+	args := m.Called(orderNumber)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Payment), args.Error(1)
+}
+
 func (m *MockPaymentRepository) Update(payment *models.Payment) error {
 	args := m.Called(payment)
 	return args.Error(0)
