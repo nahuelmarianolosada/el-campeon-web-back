@@ -1,20 +1,23 @@
 package models
 
 import (
-	"gorm.io/gorm"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type CartItem struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	CartID    uint      `gorm:"not null" json:"cart_id"`
-	Cart      *Cart     `gorm:"foreignKey:CartID;constraint:OnDelete:CASCADE" json:"-"`
-	ProductID uint      `gorm:"not null" json:"product_id"`
-	Product   *Product  `gorm:"foreignKey:ProductID" json:"product,omitempty"`
-	Quantity  int       `gorm:"not null" json:"quantity"`
-	Price     float64   `gorm:"not null" json:"price"` // Precio al momento de agregar al carrito
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID                       uint                         `gorm:"primaryKey" json:"id"`
+	CartID                   uint                         `gorm:"not null" json:"cart_id"`
+	Cart                     *Cart                        `gorm:"foreignKey:CartID;constraint:OnDelete:CASCADE" json:"-"`
+	ProductID                uint                         `gorm:"not null" json:"product_id"`
+	Product                  *Product                     `gorm:"foreignKey:ProductID" json:"product,omitempty"`
+	ProductVariantCombinationID *uint                    `gorm:"nullable" json:"variant_combination_id,omitempty"`
+	ProductVariantCombination   *ProductVariantCombination `gorm:"foreignKey:ProductVariantCombinationID;constraint:OnDelete:SET NULL" json:"variant_combination,omitempty"`
+	Quantity                 int                          `gorm:"not null" json:"quantity"`
+	Price                    float64                      `gorm:"not null" json:"price"` // Precio al momento de agregar al carrito
+	CreatedAt                time.Time                    `json:"created_at"`
+	UpdatedAt                time.Time                    `json:"updated_at"`
 }
 
 type Cart struct {
@@ -28,8 +31,9 @@ type Cart struct {
 }
 
 type AddToCartRequest struct {
-	ProductID uint `json:"product_id" binding:"required"`
-	Quantity  int  `json:"quantity" binding:"required,gt=0"`
+	SKU      string            `json:"sku" binding:"required"`
+	Quantity int               `json:"quantity" binding:"required,gt=0"`
+	Variants map[string]string `json:"variants,omitempty"` // Combinación de variantes ej: {"Color": "Rojo", "Tamaño": "Grande"}
 }
 
 type UpdateCartItemRequest struct {
@@ -44,10 +48,11 @@ type CartResponse struct {
 }
 
 type CartItemResponse struct {
-	ID        uint            `json:"id"`
-	ProductID uint            `json:"product_id"`
-	Product   ProductResponse `json:"product"`
-	Quantity  int             `json:"quantity"`
-	Price     float64         `json:"price"`
-	Subtotal  float64         `json:"subtotal"` // Quantity * Price
+	ID                    uint                             `json:"id"`
+	ProductID             uint                             `json:"product_id"`
+	Product               ProductResponse                  `json:"product"`
+	VariantCombination    *ProductVariantCombinationResponse `json:"variant_combination,omitempty"`
+	Quantity              int                              `json:"quantity"`
+	Price                 float64                          `json:"price"`
+	Subtotal              float64                          `json:"subtotal"` // Quantity * Price
 }

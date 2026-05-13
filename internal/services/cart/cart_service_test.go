@@ -195,17 +195,132 @@ func (m *MockProductRepository) UpdateStock(id uint, quantity int) error {
 	return nil
 }
 
+// MockProductVariantRepository
+type MockProductVariantRepository struct {
+	variants    map[uint]*models.ProductVariant
+	values      map[uint]*models.ProductVariantValue
+	combinations map[uint]*models.ProductVariantCombination
+	FindErr     error
+}
+
+func NewMockProductVariantRepository() *MockProductVariantRepository {
+	return &MockProductVariantRepository{
+		variants:     make(map[uint]*models.ProductVariant),
+		values:       make(map[uint]*models.ProductVariantValue),
+		combinations: make(map[uint]*models.ProductVariantCombination),
+	}
+}
+
+// Variant methods
+func (m *MockProductVariantRepository) CreateVariant(variant *models.ProductVariant) error {
+	return nil
+}
+
+func (m *MockProductVariantRepository) FindVariantByID(id uint) (*models.ProductVariant, error) {
+	if variant, exists := m.variants[id]; exists {
+		return variant, nil
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (m *MockProductVariantRepository) FindVariantsByProductID(productID uint) ([]models.ProductVariant, error) {
+	return []models.ProductVariant{}, nil
+}
+
+func (m *MockProductVariantRepository) FindVariantsByProductIDAndValue(productID uint, value string) ([]models.ProductVariant, error) {
+	return []models.ProductVariant{}, nil
+}
+
+func (m *MockProductVariantRepository) UpdateVariant(variant *models.ProductVariant) error {
+	return nil
+}
+
+func (m *MockProductVariantRepository) DeleteVariant(id uint) error {
+	return nil
+}
+
+// Variant Value methods
+func (m *MockProductVariantRepository) CreateVariantValue(value *models.ProductVariantValue) (*models.ProductVariantValue, error) {
+	return value, nil
+}
+
+func (m *MockProductVariantRepository) FindVariantValueByID(id uint) (*models.ProductVariantValue, error) {
+	if value, exists := m.values[id]; exists {
+		return value, nil
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (m *MockProductVariantRepository) FindVariantValuesByVariantID(variantID uint) ([]models.ProductVariantValue, error) {
+	return []models.ProductVariantValue{}, nil
+}
+
+func (m *MockProductVariantRepository) UpdateVariantValue(value *models.ProductVariantValue) error {
+	return nil
+}
+
+func (m *MockProductVariantRepository) DeleteVariantValue(id uint) error {
+	return nil
+}
+
+func (m *MockProductVariantRepository) DeleteVariantValuesByVariantID(variantID uint) error {
+	return nil
+}
+
+// Variant Combination methods
+func (m *MockProductVariantRepository) CreateVariantCombination(combination *models.ProductVariantCombination) error {
+	return nil
+}
+
+func (m *MockProductVariantRepository) FindVariantCombinationByID(id uint) (*models.ProductVariantCombination, error) {
+	if combination, exists := m.combinations[id]; exists {
+		return combination, nil
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (m *MockProductVariantRepository) FindVariantCombinationsByProductID(productID uint, limit, offset int) ([]models.ProductVariantCombination, error) {
+	return []models.ProductVariantCombination{}, nil
+}
+
+func (m *MockProductVariantRepository) FindVariantCombinationBySKU(sku string) (*models.ProductVariantCombination, error) {
+	if m.FindErr != nil {
+		return nil, m.FindErr
+	}
+
+	for _, combination := range m.combinations {
+		if combination.SKU == sku {
+			return combination, nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (m *MockProductVariantRepository) UpdateVariantCombination(combination *models.ProductVariantCombination) error {
+	return nil
+}
+
+func (m *MockProductVariantRepository) DeleteVariantCombination(id uint) error {
+	return nil
+}
+
+func (m *MockProductVariantRepository) UpdateVariantCombinationStock(id uint, quantity int) error {
+	return nil
+}
+
 // ============ Tests ============
 
 func TestAddToCart_Success(t *testing.T) {
 	cartRepo := NewMockCartRepository()
 	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
 
-	service := NewCartService(cartRepo, productRepo)
+	service := NewCartService(cartRepo, productRepo, variantRepo)
 
 	// Setup: Crear producto
 	product := &models.Product{
 		ID:              1,
+		SKU:             "PROD001",
 		Name:            "Test Product",
 		PriceRetail:     100.0,
 		PriceWholesale:  80.0,
@@ -216,8 +331,8 @@ func TestAddToCart_Success(t *testing.T) {
 
 	// Agregar al carrito
 	req := &models.AddToCartRequest{
-		ProductID: 1,
-		Quantity:  5,
+		SKU:      "PROD001",
+		Quantity: 5,
 	}
 
 	err := service.AddToCart(1, req, false)
@@ -244,12 +359,14 @@ func TestAddToCart_Success(t *testing.T) {
 func TestAddToCart_WithBulkPricing(t *testing.T) {
 	cartRepo := NewMockCartRepository()
 	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
 
-	service := NewCartService(cartRepo, productRepo)
+	service := NewCartService(cartRepo, productRepo, variantRepo)
 
 	// Setup: Crear producto
 	product := &models.Product{
 		ID:              1,
+		SKU:             "PROD001",
 		Name:            "Test Product",
 		PriceRetail:     100.0,
 		PriceWholesale:  80.0,
@@ -260,8 +377,8 @@ func TestAddToCart_WithBulkPricing(t *testing.T) {
 
 	// Agregar al carrito como mayorista con cantidad >= MinBulkQuantity
 	req := &models.AddToCartRequest{
-		ProductID: 1,
-		Quantity:  15,
+		SKU:      "PROD001",
+		Quantity: 15,
 	}
 
 	err := service.AddToCart(1, req, true) // isBulkBuyer = true
@@ -280,20 +397,22 @@ func TestAddToCart_WithBulkPricing(t *testing.T) {
 func TestAddToCart_InsufficientStock(t *testing.T) {
 	cartRepo := NewMockCartRepository()
 	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
 
-	service := NewCartService(cartRepo, productRepo)
+	service := NewCartService(cartRepo, productRepo, variantRepo)
 
 	// Setup: Producto con poco stock
 	product := &models.Product{
 		ID:    1,
+		SKU:   "PROD001",
 		Stock: 5,
 	}
 	productRepo.products[1] = product
 
 	// Intentar agregar más de lo disponible
 	req := &models.AddToCartRequest{
-		ProductID: 1,
-		Quantity:  10,
+		SKU:      "PROD001",
+		Quantity: 10,
 	}
 
 	err := service.AddToCart(1, req, false)
@@ -306,13 +425,14 @@ func TestAddToCart_InsufficientStock(t *testing.T) {
 func TestAddToCart_ProductNotFound(t *testing.T) {
 	cartRepo := NewMockCartRepository()
 	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
 
-	service := NewCartService(cartRepo, productRepo)
+	service := NewCartService(cartRepo, productRepo, variantRepo)
 
 	// Intentar agregar producto que no existe
 	req := &models.AddToCartRequest{
-		ProductID: 999,
-		Quantity:  5,
+		SKU:      "NONEXISTENT",
+		Quantity: 5,
 	}
 
 	err := service.AddToCart(1, req, false)
@@ -325,8 +445,9 @@ func TestAddToCart_ProductNotFound(t *testing.T) {
 func TestGetCart_Success(t *testing.T) {
 	cartRepo := NewMockCartRepository()
 	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
 
-	service := NewCartService(cartRepo, productRepo)
+	service := NewCartService(cartRepo, productRepo, variantRepo)
 
 	// Setup: Crear carrito con items
 	cart, _ := cartRepo.GetOrCreateCart(1)
@@ -372,8 +493,9 @@ func TestGetCart_Success(t *testing.T) {
 func TestUpdateCartItem_Success(t *testing.T) {
 	cartRepo := NewMockCartRepository()
 	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
 
-	service := NewCartService(cartRepo, productRepo)
+	service := NewCartService(cartRepo, productRepo, variantRepo)
 
 	// Setup
 	product := &models.Product{
@@ -409,8 +531,9 @@ func TestUpdateCartItem_Success(t *testing.T) {
 func TestRemoveFromCart_Success(t *testing.T) {
 	cartRepo := NewMockCartRepository()
 	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
 
-	service := NewCartService(cartRepo, productRepo)
+	service := NewCartService(cartRepo, productRepo, variantRepo)
 
 	// Setup
 	cart, _ := cartRepo.GetOrCreateCart(1)
@@ -435,8 +558,9 @@ func TestRemoveFromCart_Success(t *testing.T) {
 func TestClearCart_Success(t *testing.T) {
 	cartRepo := NewMockCartRepository()
 	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
 
-	service := NewCartService(cartRepo, productRepo)
+	service := NewCartService(cartRepo, productRepo, variantRepo)
 
 	// Setup
 	cart, _ := cartRepo.GetOrCreateCart(1)
@@ -461,8 +585,9 @@ func TestClearCart_Success(t *testing.T) {
 func TestCalculateCartTotal_Success(t *testing.T) {
 	cartRepo := NewMockCartRepository()
 	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
 
-	service := NewCartService(cartRepo, productRepo)
+	service := NewCartService(cartRepo, productRepo, variantRepo)
 
 	// Setup
 	cart, _ := cartRepo.GetOrCreateCart(1)
@@ -489,23 +614,246 @@ func TestCalculateCartTotal_Success(t *testing.T) {
 	}
 }
 
+// ============ Variant Combination Tests ============
+
+func TestAddToCart_WithVariantCombination_Success(t *testing.T) {
+	cartRepo := NewMockCartRepository()
+	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
+
+	service := NewCartService(cartRepo, productRepo, variantRepo)
+
+	// Setup: Crear producto base
+	product := &models.Product{
+		ID:              1,
+		SKU:             "POLO",
+		Name:            "Polo Sport",
+		PriceRetail:     300.0,
+		PriceWholesale:  240.0,
+		Stock:           100,
+		MinBulkQuantity: 10,
+	}
+	productRepo.products[1] = product
+
+	// Setup: Crear combinación de variante
+	variantCombo := &models.ProductVariantCombination{
+		ID:                 1,
+		ProductID:          1,
+		SKU:                "POLO-RED-LARGE",
+		VariantCombination: `{"Color": "Rojo", "Tamaño": "Large"}`,
+		Stock:              25,
+		PriceAdjustment:    50.0,
+		IsActive:           true,
+		Product:            product,
+	}
+	variantRepo.combinations[1] = variantCombo
+
+	// Agregar variante al carrito
+	req := &models.AddToCartRequest{
+		SKU:      "POLO-RED-LARGE",
+		Quantity: 2,
+		Variants: map[string]string{
+			"Color":  "Rojo",
+			"Tamaño": "Large",
+		},
+	}
+
+	err := service.AddToCart(1, req, false)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	// Verificar que se agregó correctamente
+	cart, _ := cartRepo.GetCart(1)
+	if len(cart.Items) != 1 {
+		t.Fatalf("Expected 1 item in cart, got %d", len(cart.Items))
+	}
+
+	item := cart.Items[0]
+	if item.Quantity != 2 {
+		t.Fatalf("Expected quantity 2, got %d", item.Quantity)
+	}
+
+	// Precio = precio_retail + price_adjustment
+	expectedPrice := 300.0 + 50.0
+	if item.Price != expectedPrice {
+		t.Fatalf("Expected price %.2f, got %.2f", expectedPrice, item.Price)
+	}
+
+	if item.ProductVariantCombinationID == nil {
+		t.Fatal("Expected ProductVariantCombinationID to be set")
+	}
+
+	if *item.ProductVariantCombinationID != 1 {
+		t.Fatalf("Expected ProductVariantCombinationID 1, got %d", *item.ProductVariantCombinationID)
+	}
+}
+
+func TestAddToCart_WithVariantCombination_BulkPricing(t *testing.T) {
+	cartRepo := NewMockCartRepository()
+	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
+
+	service := NewCartService(cartRepo, productRepo, variantRepo)
+
+	// Setup: Producto base
+	product := &models.Product{
+		ID:              1,
+		SKU:             "POLO",
+		Name:            "Polo Sport",
+		PriceRetail:     300.0,
+		PriceWholesale:  240.0,
+		Stock:           100,
+		MinBulkQuantity: 10,
+	}
+	productRepo.products[1] = product
+
+	// Setup: Variante
+	variantCombo := &models.ProductVariantCombination{
+		ID:                 1,
+		ProductID:          1,
+		SKU:                "POLO-RED-LARGE",
+		VariantCombination: `{"Color": "Rojo", "Tamaño": "Large"}`,
+		Stock:              25,
+		PriceAdjustment:    50.0,
+		IsActive:           true,
+		Product:            product,
+	}
+	variantRepo.combinations[1] = variantCombo
+
+	// Agregar variante como mayorista (cantidad >= MinBulkQuantity)
+	req := &models.AddToCartRequest{
+		SKU:      "POLO-RED-LARGE",
+		Quantity: 15,
+	}
+
+	err := service.AddToCart(1, req, true) // isBulkBuyer = true
+
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	cart, _ := cartRepo.GetCart(1)
+	item := cart.Items[0]
+
+	// Precio = precio_wholesale + price_adjustment
+	expectedPrice := 240.0 + 50.0
+	if item.Price != expectedPrice {
+		t.Fatalf("Expected wholesale price %.2f, got %.2f", expectedPrice, item.Price)
+	}
+}
+
+func TestAddToCart_WithVariantCombination_InsufficientStock(t *testing.T) {
+	cartRepo := NewMockCartRepository()
+	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
+
+	service := NewCartService(cartRepo, productRepo, variantRepo)
+
+	// Setup: Producto
+	product := &models.Product{
+		ID:    1,
+		SKU:   "POLO",
+		Stock: 100,
+	}
+	productRepo.products[1] = product
+
+	// Setup: Variante con poco stock
+	variantCombo := &models.ProductVariantCombination{
+		ID:        1,
+		ProductID: 1,
+		SKU:       "POLO-RED-LARGE",
+		Stock:     5, // Solo 5 en stock
+		IsActive:  true,
+		Product:   product,
+	}
+	variantRepo.combinations[1] = variantCombo
+
+	// Intentar agregar más de lo disponible en la variante
+	req := &models.AddToCartRequest{
+		SKU:      "POLO-RED-LARGE",
+		Quantity: 10,
+	}
+
+	err := service.AddToCart(1, req, false)
+
+	if err == nil {
+		t.Fatal("Expected error for insufficient variant stock")
+	}
+
+	if err.Error() != "insufficient stock for variant combination. available: 5, requested: 10" {
+		t.Fatalf("Expected stock error, got: %s", err.Error())
+	}
+}
+
+func TestAddToCart_VariantInactive_FallbackToProduct(t *testing.T) {
+	cartRepo := NewMockCartRepository()
+	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
+
+	service := NewCartService(cartRepo, productRepo, variantRepo)
+
+	// Setup: Producto
+	product := &models.Product{
+		ID:          1,
+		SKU:         "POLO-RED-LARGE",
+		Name:        "Polo Sport",
+		PriceRetail: 300.0,
+		Stock:       100,
+	}
+	productRepo.products[1] = product
+
+	// Setup: Variante inactiva (IsActive = false)
+	variantCombo := &models.ProductVariantCombination{
+		ID:        1,
+		ProductID: 1,
+		SKU:       "POLO-RED-LARGE",
+		Stock:     25,
+		IsActive:  false, // Inactiva
+		Product:   product,
+	}
+	variantRepo.combinations[1] = variantCombo
+
+	// Agregar - debería usar el producto base
+	req := &models.AddToCartRequest{
+		SKU:      "POLO-RED-LARGE",
+		Quantity: 5,
+	}
+
+	err := service.AddToCart(1, req, false)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	// Verificar que se agregó como producto, no como variante
+	cart, _ := cartRepo.GetCart(1)
+	item := cart.Items[0]
+	if item.ProductVariantCombinationID != nil {
+		t.Fatal("Expected ProductVariantCombinationID to be nil (product, not variant)")
+	}
+}
+
 // ============ Benchmark Tests ============
 
 func BenchmarkAddToCart(b *testing.B) {
 	cartRepo := NewMockCartRepository()
 	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
 
-	service := NewCartService(cartRepo, productRepo)
+	service := NewCartService(cartRepo, productRepo, variantRepo)
 
 	product := &models.Product{
 		ID:    1,
+		SKU:   "PROD001",
 		Stock: 1000,
 	}
 	productRepo.products[1] = product
 
 	req := &models.AddToCartRequest{
-		ProductID: 1,
-		Quantity:  5,
+		SKU:      "PROD001",
+		Quantity: 5,
 	}
 
 	b.ResetTimer()
@@ -520,8 +868,9 @@ func BenchmarkAddToCart(b *testing.B) {
 func BenchmarkGetCart(b *testing.B) {
 	cartRepo := NewMockCartRepository()
 	productRepo := NewMockProductRepository()
+	variantRepo := NewMockProductVariantRepository()
 
-	service := NewCartService(cartRepo, productRepo)
+	service := NewCartService(cartRepo, productRepo, variantRepo)
 
 	// Setup: Crear carrito con items
 	cart, _ := cartRepo.GetOrCreateCart(1)

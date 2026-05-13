@@ -2,6 +2,7 @@ package variant
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
@@ -317,6 +318,7 @@ func TestCreateVariantCombination(t *testing.T) {
 	}
 
 	mockProductRepo.On("FindByID", uint(1)).Return(product, nil)
+	mockVariantRepo.On("FindVariantCombinationBySKU", "TEST-RED-SMALL").Return(nil, fmt.Errorf("not found"))
 	mockVariantRepo.On("CreateVariantCombination", mock.MatchedBy(func(vc *models.ProductVariantCombination) bool {
 		return vc.ProductID == 1 && vc.SKU == "TEST-RED-SMALL" && vc.Stock == 50
 	})).Run(func(args mock.Arguments) {
