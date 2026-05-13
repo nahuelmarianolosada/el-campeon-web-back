@@ -198,6 +198,11 @@ func (s *productVariantService) CreateVariantCombination(productID uint, req *mo
 		return nil, fmt.Errorf("product not found: %w", err)
 	}
 
+	variantCombination, err := s.variantRepo.FindVariantCombinationBySKU(req.SKU)
+	if err == nil && variantCombination.ProductID == productID {
+		return s.toVariantCombinationResponse(variantCombination, product), nil
+	}
+
 	// Convert variant combination map to JSON
 	combinationJSON, err := json.Marshal(req.VariantCombination)
 	if err != nil {

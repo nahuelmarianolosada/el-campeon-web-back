@@ -65,6 +65,7 @@ func (r *cartRepository) GetCart(userID uint) (*models.Cart, error) {
 	var cart models.Cart
 	if err := r.db.Preload("Items").
 		Preload("Items.Product").
+		Preload("Items.ProductVariantCombination").
 		Preload("User").
 		First(&cart, "user_id = ?", userID).
 		Error; err != nil {

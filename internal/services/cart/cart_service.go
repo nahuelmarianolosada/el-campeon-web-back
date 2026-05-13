@@ -1,6 +1,7 @@
 package cart
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -20,12 +21,14 @@ type CartService interface {
 type cartService struct {
 	cartRepo    repositories.CartRepository
 	productRepo repositories.ProductRepository
+	variantRepo repositories.ProductVariantRepository
 }
 
-func NewCartService(cartRepo repositories.CartRepository, productRepo repositories.ProductRepository) CartService {
+func NewCartService(cartRepo repositories.CartRepository, productRepo repositories.ProductRepository, variantRepo repositories.ProductVariantRepository) CartService {
 	return &cartService{
 		cartRepo:    cartRepo,
 		productRepo: productRepo,
+		variantRepo: variantRepo,
 	}
 }
 
@@ -36,10 +39,54 @@ func (s *cartService) AddToCart(userID uint, req *models.AddToCartRequest, isBul
 		return fmt.Errorf("error getting or creating cart: %w", err)
 	}
 
-	// Validar que el producto existe y tiene stock
-	product, err := s.productRepo.FindByID(req.ProductID)
-	if err != nil {
+	// Intentar obtener como combinación de variante
+	variantComb, variantErr := s.variantRepo.FindVariantCombinationBySKU(req.SKU)
+
+	if variantErr == nil && variantComb != nil && variantComb.ID != 0 && variantComb.IsActive {
+		// Es una variante combinación - obtener el producto asociado
+		product, err := s.productRepo.FindByID(variantComb.ProductID)
+		if err != nil {
+			return fmt.Errorf("error finding product for variant combination: %w", err)
+		}
+
+		// Validar stock de la variante
+		if variantComb.Stock < req.Quantity {
+			return fmt.Errorf("insufficient stock for variant combination. available: %d, requested: %d", variantComb.Stock, req.Quantity)
+		}
+
+		// Calcular precio: precio base del producto + ajuste de variante
+		var price float64
+		if isBulkBuyer && req.Quantity >= product.MinBulkQuantity {
+			// Para variantes con mayorista, aplicar mayorista al precio base y luego agregar ajuste
+			price = product.PriceWholesale + variantComb.PriceAdjustment
+		} else {
+			price = product.PriceRetail + variantComb.PriceAdjustment
+		}
+
+		// Crear item del carrito con referencia a la variante combinación
+		item := &models.CartItem{
+			CartID:                      cart.ID,
+			ProductID:                   product.ID,
+			ProductVariantCombinationID: &variantComb.ID,
+			Quantity:                    req.Quantity,
+			Price:                       price,
+		}
+
+		if err := s.cartRepo.AddItem(userID, item); err != nil {
+			return fmt.Errorf("error adding variant combination to cart: %w", err)
+		}
+
+		return nil
+	}
+
+	// Si no es variante, buscar producto normal
+	product, err := s.productRepo.FindBySKU(req.SKU)
+	if err != nil && err.Error() != "record not found" {
 		return fmt.Errorf("error finding product: %w", err)
+	}
+
+	if product == nil || product.ID == 0 {
+		return fmt.Errorf("product or variant combination not found with SKU: %s", req.SKU)
 	}
 
 	if product.Stock < req.Quantity {
@@ -54,10 +101,10 @@ func (s *cartService) AddToCart(userID uint, req *models.AddToCartRequest, isBul
 		price = product.PriceRetail
 	}
 
-	// Crear item del carrito
+	// Crear item del carrito sin referencia a variante
 	item := &models.CartItem{
 		CartID:    cart.ID,
-		ProductID: req.ProductID,
+		ProductID: product.ID,
 		Quantity:  req.Quantity,
 		Price:     price,
 	}
@@ -188,14 +235,30 @@ func (s *cartService) calculateTotal(items []models.CartItem) float64 {
 func (s *cartService) toCartItemResponses(items []models.CartItem) []models.CartItemResponse {
 	var responses []models.CartItemResponse
 	for _, item := range items {
-		responses = append(responses, models.CartItemResponse{
+		itemResponse := models.CartItemResponse{
 			ID:        item.ID,
 			ProductID: item.ProductID,
 			Product:   *s.toProductResponse(item.Product),
 			Quantity:  item.Quantity,
 			Price:     item.Price,
 			Subtotal:  float64(item.Quantity) * item.Price,
-		})
+		}
+
+		// Agregar información de variante si existe
+		if item.ProductVariantCombination != nil {
+			itemResponse.VariantCombination = &models.ProductVariantCombinationResponse{
+				ID:                 item.ProductVariantCombination.ID,
+				SKU:                item.ProductVariantCombination.SKU,
+				VariantCombination: s.parseVariantCombination(item.ProductVariantCombination),
+				Stock:              item.ProductVariantCombination.Stock,
+				PriceAdjustment:    item.ProductVariantCombination.PriceAdjustment,
+				ImageURL:           item.ProductVariantCombination.ImageURL,
+				IsActive:           item.ProductVariantCombination.IsActive,
+				CreatedAt:          item.ProductVariantCombination.CreatedAt,
+			}
+		}
+
+		responses = append(responses, itemResponse)
 	}
 	return responses
 }
@@ -216,3 +279,18 @@ func (s *cartService) toProductResponse(product *models.Product) *models.Product
 		CreatedAt:       product.CreatedAt,
 	}
 }
+
+// parseVariantCombination convierte el JSON serializado de variantes a un mapa
+func (s *cartService) parseVariantCombination(variant *models.ProductVariantCombination) map[string]string {
+	if variant == nil || variant.VariantCombination == "" {
+		return nil
+	}
+
+	var combination map[string]string
+	if err := json.Unmarshal([]byte(variant.VariantCombination), &combination); err != nil {
+		// Si no se puede parsear, retornar nil
+		return nil
+	}
+	return combination
+}
+
