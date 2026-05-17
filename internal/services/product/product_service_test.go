@@ -103,11 +103,7 @@ func (m *MockProductImageRepository) FindByProductID(productID uint) ([]models.P
 	return m.images[productID], nil
 }
 
-func (m *MockProductImageRepository) ReplaceForProduct(productID uint, urls []string) error {
-	images := make([]models.ProductImage, 0, len(urls))
-	for i, url := range urls {
-		images = append(images, models.ProductImage{ProductID: productID, ImageURL: url, DisplayOrder: i})
-	}
+func (m *MockProductImageRepository) ReplaceForProduct(productID uint, images []models.ProductImage) error {
 	m.images[productID] = images
 	return nil
 }
