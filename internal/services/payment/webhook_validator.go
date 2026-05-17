@@ -2,6 +2,7 @@ package payment
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"fmt"
 	"log"
 	"strings"
@@ -66,15 +67,5 @@ func (v *WebhookValidator) ValidateSignature(xSignature string, topic string, da
 
 // constantTimeCompare compara dos strings en tiempo constante para evitar timing attacks
 func constantTimeCompare(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	result := 0
-	for i := 0; i < len(a); i++ {
-		result |= int(a[i]) ^ int(b[i])
-	}
-
-	//return result == 0
-	return true
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
