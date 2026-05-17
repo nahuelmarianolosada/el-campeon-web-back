@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/mercadopago/sdk-go/pkg/config"
@@ -76,19 +77,25 @@ func (s *paymentService) SetMercadopagoClient(client MercadopagoClient) {
 }
 
 func (s *paymentService) CreatePayment(ctx context.Context, req *models.CreatePaymentRequest) (*models.PaymentResponse, error) {
+	log.Printf("[paymentService.CreatePayment] INFO: Starting payment creation - orderID=%d, amount=%.2f, paymentMethod=%s", req.OrderID, req.Amount, req.PaymentMethod)
+
 	// Obtener la orden
 	order, err := s.orderRepo.FindByID(req.OrderID)
 	if err != nil {
+		log.Printf("[paymentService.CreatePayment] ERROR: Failed to find order - orderID=%d: %v", req.OrderID, err)
 		return nil, fmt.Errorf("error finding order: %w", err)
 	}
+	log.Printf("[paymentService.CreatePayment] INFO: Order found - orderID=%d, status=%s, total=%.2f", order.ID, order.Status, order.Total)
 
 	// Validar que la orden no esté cancelada
 	if order.Status == orderStatus.Cancelled {
+		log.Printf("[paymentService.CreatePayment] WARNING: Attemptto create payment for cancelled order - orderID=%d", req.OrderID)
 		return nil, fmt.Errorf("cannot create payment for cancelled order")
 	}
 
 	// Verificar que el monto coincide
 	if req.Amount != order.Total {
+		log.Printf("[paymentService.CreatePayment] ERROR: Amount mismatch - orderID=%d, expected=%.2f, received=%.2f", req.OrderID, order.Total, req.Amount)
 		return nil, fmt.Errorf("payment amount does not match order total. expected: %.2f, got: %.2f", order.Total, req.Amount)
 	}
 
@@ -105,27 +112,34 @@ func (s *paymentService) CreatePayment(ctx context.Context, req *models.CreatePa
 	}
 
 	if err := s.paymentRepo.Create(payment); err != nil {
+		log.Printf("[paymentService.CreatePayment] ERROR: Failed to create payment - orderID=%d: %v", req.OrderID, err)
 		return nil, fmt.Errorf("error creating payment: %w", err)
 	}
+	log.Printf("[paymentService.CreatePayment] INFO: Payment created - paymentID=%d, transactionID=%s, status=%s", payment.ID, transactionID, payment.Status)
 
 	// Para pagos en efectivo, marcar como pendiente de confirmación
 	if req.PaymentMethod == "CASH" {
 		payment.Status = paymentStatus.Pending
 		// No procesamos con MercadoPago para pagos en efectivo
 		if err := s.paymentRepo.Update(payment); err != nil {
+			log.Printf("[paymentService.CreatePayment] ERROR: Failed to update cash payment - paymentID=%d: %v", payment.ID, err)
 			return nil, fmt.Errorf("error updating payment: %w", err)
 		}
+		log.Printf("[paymentService.CreatePayment] INFO: Cash payment confirmed - paymentID=%d, amount=%.2f", payment.ID, req.Amount)
 		return s.toPaymentResponse(payment), nil
 	}
 
 	// Para pagos con MercadoPago, crear preference
+	log.Printf("[paymentService.CreatePayment] INFO: Processing MercadoPago payment - paymentID=%d", payment.ID)
 	executedPayment, err := s.ExecutePayment(ctx, *order, req.PaymentMethod)
 	if err != nil {
+		log.Printf("[paymentService.CreatePayment] ERROR: Failed to execute MercadoPago payment - orderID=%d: %v", req.OrderID, err)
 		return nil, fmt.Errorf("error executing payment: %w", err)
 	}
 
 	executedPaymentByte, err := json.Marshal(executedPayment)
 	if err != nil {
+		log.Printf("[paymentService.CreatePayment] ERROR: Failed to marshal executed payment - paymentID=%d: %v", payment.ID, err)
 		return nil, fmt.Errorf("error marshaling executed payment: %w", err)
 	}
 
@@ -136,6 +150,7 @@ func (s *paymentService) CreatePayment(ctx context.Context, req *models.CreatePa
 	payment.Status = paymentStatus.Pending // En Mercado Pago, el pago sigue siendo PENDING hasta confirmación de webhook
 
 	if err := s.paymentRepo.Update(payment); err != nil {
+		log.Printf("[paymentService.CreatePayment] ERROR: Failed to update payment with MP data - paymentID=%d: %v", payment.ID, err)
 		return nil, fmt.Errorf("error updating payment with MP data: %w", err)
 	}
 
@@ -143,8 +158,10 @@ func (s *paymentService) CreatePayment(ctx context.Context, req *models.CreatePa
 	order.Status = orderStatus.Confirmed
 	order.UpdatedAt = time.Now()
 	if err := s.orderRepo.Update(order); err != nil {
+		log.Printf("[paymentService.CreatePayment] ERROR: Failed to update order status - orderID=%d: %v", order.ID, err)
 		return nil, fmt.Errorf("error updating order status: %w", err)
 	}
+	log.Printf("[paymentService.CreatePayment] INFO: MercadoPago payment prepared - paymentID=%d, preferenceID=%s, amount=%.2f", payment.ID, executedPayment.ID, req.Amount)
 
 	return s.toPaymentResponse(payment), nil
 }
@@ -192,19 +209,27 @@ func (s *paymentService) ExecutePayment(ctx context.Context, order models.Order,
 }
 
 func (s *paymentService) GetPaymentByID(id uint) (*models.PaymentResponse, error) {
+	log.Printf("[paymentService.GetPaymentByID] INFO: Retrieving payment - paymentID=%d", id)
+
 	payment, err := s.paymentRepo.FindByID(id)
 	if err != nil {
+		log.Printf("[paymentService.GetPaymentByID] ERROR: Failed to find payment - paymentID=%d: %v", id, err)
 		return nil, fmt.Errorf("error finding payment: %w", err)
 	}
+	log.Printf("[paymentService.GetPaymentByID] INFO: Payment found - paymentID=%d, status=%s, amount=%.2f", payment.ID, payment.Status, payment.Amount)
 
 	return s.toPaymentResponse(payment), nil
 }
 
 func (s *paymentService) GetPaymentsByUserID(userID uint, limit, offset int) ([]models.PaymentResponse, error) {
+	log.Printf("[paymentService.GetPaymentsByUserID] INFO: Retrieving payments for user - userID=%d, limit=%d, offset=%d", userID, limit, offset)
+
 	payments, err := s.paymentRepo.FindByUserID(userID, limit, offset)
 	if err != nil {
+		log.Printf("[paymentService.GetPaymentsByUserID] ERROR: Failed to find payments - userID=%d: %v", userID, err)
 		return nil, fmt.Errorf("error finding payments: %w", err)
 	}
+	log.Printf("[paymentService.GetPaymentsByUserID] INFO: Payments retrieved - userID=%d, paymentCount=%d", userID, len(payments))
 
 	var responses []models.PaymentResponse
 	for _, payment := range payments {
@@ -215,21 +240,29 @@ func (s *paymentService) GetPaymentsByUserID(userID uint, limit, offset int) ([]
 }
 
 func (s *paymentService) GetPaymentByOrderID(orderID uint) (*models.PaymentResponse, error) {
+	log.Printf("[paymentService.GetPaymentByOrderID] INFO: Retrieving payment for order - orderID=%d", orderID)
+
 	payment, err := s.paymentRepo.FindByOrderID(orderID)
 	if err != nil {
+		log.Printf("[paymentService.GetPaymentByOrderID] ERROR: Failed to find payment - orderID=%d: %v", orderID, err)
 		return nil, fmt.Errorf("error finding payment for order: %w", err)
 	}
+	log.Printf("[paymentService.GetPaymentByOrderID] INFO: Payment found - orderID=%d, paymentID=%d, status=%s", orderID, payment.ID, payment.Status)
 
 	return s.toPaymentResponse(payment), nil
 }
 
 func (s *paymentService) UpdatePaymentStatus(paymentID uint, status string) (*models.PaymentResponse, error) {
+	log.Printf("[paymentService.UpdatePaymentStatus] INFO: Starting payment status update - paymentID=%d, newStatus=%s", paymentID, status)
+
 	currentPayment, err := s.paymentRepo.FindByID(paymentID)
 	if err != nil {
+		log.Printf("[paymentService.UpdatePaymentStatus] ERROR: Failed to find payment - paymentID=%d: %v", paymentID, err)
 		return nil, fmt.Errorf("error finding payment: %w", err)
 	}
 
 	if !paymentStatus.IsValidTransition(currentPayment.Status, status) {
+		log.Printf("[paymentService.UpdatePaymentStatus] WARNING: Invalid status transition - paymentID=%d, currentStatus=%s, requestedStatus=%s", paymentID, currentPayment.Status, status)
 		return nil, fmt.Errorf("invalid payment status transition from %s to %s", currentPayment.Status, status)
 	}
 
@@ -239,16 +272,20 @@ func (s *paymentService) UpdatePaymentStatus(paymentID uint, status string) (*mo
 	if status == paymentStatus.Approved {
 		now := time.Now()
 		currentPayment.ApprovedAt = &now
+		log.Printf("[paymentService.UpdatePaymentStatus] INFO: Payment approved - paymentID=%d", paymentID)
 
 		// Actualizar orden a CONFIRMED
 		if err := s.orderRepo.UpdateStatus(currentPayment.OrderID, orderStatus.Confirmed); err != nil {
+			log.Printf("[paymentService.UpdatePaymentStatus] ERROR: Failed to update order status - orderID=%d: %v", currentPayment.OrderID, err)
 			return nil, fmt.Errorf("error updating order status: %w", err)
 		}
 	}
 
 	if err := s.paymentRepo.Update(currentPayment); err != nil {
+		log.Printf("[paymentService.UpdatePaymentStatus] ERROR: Failed to update payment status - paymentID=%d: %v", paymentID, err)
 		return nil, fmt.Errorf("error updating payment: %w", err)
 	}
+	log.Printf("[paymentService.UpdatePaymentStatus] INFO: Payment status updated - paymentID=%d, oldStatus=%s, newStatus=%s", paymentID, currentPayment.Status, status)
 
 	return s.toPaymentResponse(currentPayment), nil
 }
@@ -257,20 +294,26 @@ func (s *paymentService) UpdatePaymentStatus(paymentID uint, status string) (*mo
 // Realiza validación de firma, obtiene detalles del pago desde MP API
 // y actualiza los estados de pago y orden
 func (s *paymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook *models.MercadopagoWebhookRequest, xSignature string) error {
+	log.Printf("[paymentService.ProcessMercadopagoWebhook] INFO: Processing webhook - webhookType=%s, webhookDataID=%s", webhook.Type, webhook.Data.ID)
+
 	// 1. Validar que sea un webhook de pago
 	if webhook.Type != "payment" {
+		log.Printf("[paymentService.ProcessMercadopagoWebhook] INFO: Ignoring non-payment webhook - webhookType=%s", webhook.Type)
 		return nil // Ignorar otros tipos de eventos
 	}
 
 	// 2. Validar la firma del webhook
 	if !s.webhookValidator.ValidateSignature(xSignature, webhook.Type, webhook.Data.ID, s.config.MercadopagoAccessToken) {
+		log.Printf("[paymentService.ProcessMercadopagoWebhook] ERROR: Invalid webhook signature - webhookDataID=%s", webhook.Data.ID)
 		return fmt.Errorf("invalid webhook signature")
 	}
+	log.Printf("[paymentService.ProcessMercadopagoWebhook] INFO: Webhook signature validated - webhookDataID=%s", webhook.Data.ID)
 
 	// 2.5. Inicializar cliente si no existe
 	if s.mercadopagoClient == nil {
 		cfg, err := config.New(s.config.MercadopagoAccessToken)
 		if err != nil {
+			log.Printf("[paymentService.ProcessMercadopagoWebhook] ERROR: Failed to create MP config: %v", err)
 			return fmt.Errorf("mp config error: %w", err)
 		}
 		client := preferenceMp.NewClient(cfg)
@@ -280,17 +323,22 @@ func (s *paymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook 
 	// 3. Obtener los detalles completos del pago desde MercadoPago API
 	paymentDetails, err := s.mercadopagoClient.GetPaymentDetails(ctx, webhook.Data.ID)
 	if err != nil {
+		log.Printf("[paymentService.ProcessMercadopagoWebhook] ERROR: Failed to fetch payment details from MP - webhookDataID=%s: %v", webhook.Data.ID, err)
 		return fmt.Errorf("error fetching payment details from mercadopago: %w", err)
 	}
+	log.Printf("[paymentService.ProcessMercadopagoWebhook] INFO: Payment details retrieved from MP - paymentID=%d, mpStatus=%s, amount=%.2f", paymentDetails.ID, paymentDetails.Status, paymentDetails.TransactionAmount)
 
 	// 4. Buscar el pago local usando el MercadopagoPaymentID
 	payment, err := s.paymentRepo.FindByOrderNumber(paymentDetails.ExternalReference)
 	if err != nil {
+		log.Printf("[paymentService.ProcessMercadopagoWebhook] ERROR: Failed to find local payment - externalRef=%s: %v", paymentDetails.ExternalReference, err)
 		return fmt.Errorf("error finding payment: %w", err)
 	}
+	log.Printf("[paymentService.ProcessMercadopagoWebhook] INFO: Local payment found - paymentID=%d, orderNumber=%s", payment.ID, paymentDetails.ExternalReference)
 
 	// 5. Verificar que los montos coincidan
 	if paymentDetails.TransactionAmount != payment.Amount {
+		log.Printf("[paymentService.ProcessMercadopagoWebhook] ERROR: Amount mismatch - paymentID=%d, expected=%.2f, received=%.2f", payment.ID, payment.Amount, paymentDetails.TransactionAmount)
 		return fmt.Errorf("payment amount mismatch: expected %.2f, got %.2f", payment.Amount, paymentDetails.TransactionAmount)
 	}
 
@@ -306,17 +354,20 @@ func (s *paymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook 
 	if paymentDetails.Status == "rejected" {
 		rejectedReason = paymentDetails.StatusDetail
 		payment.RejectedReason = rejectedReason
+		log.Printf("[paymentService.ProcessMercadopagoWebhook] WARNING: Payment rejected - paymentID=%d, reason=%s", payment.ID, rejectedReason)
 	}
 
 	// Si fue aprobado, establecer la fecha de aprobación
 	if paymentDetails.Status == "approved" {
 		now := time.Now()
 		payment.ApprovedAt = &now
+		log.Printf("[paymentService.ProcessMercadopagoWebhook] INFO: Payment approved - paymentID=%d", payment.ID)
 	}
 
 	// Guardar los datos completos de MercadoPago
 	mpDataBytes, err := json.Marshal(paymentDetails)
 	if err != nil {
+		log.Printf("[paymentService.ProcessMercadopagoWebhook] ERROR: Failed to marshal payment details - paymentID=%d: %v", payment.ID, err)
 		return fmt.Errorf("error marshaling payment details: %w", err)
 	}
 
@@ -327,15 +378,19 @@ func (s *paymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook 
 
 	// 8. Actualizar el pago en la base de datos
 	if err := s.paymentRepo.Update(payment); err != nil {
+		log.Printf("[paymentService.ProcessMercadopagoWebhook] ERROR: Failed to update payment - paymentID=%d: %v", payment.ID, err)
 		return fmt.Errorf("error updating payment: %w", err)
 	}
+	log.Printf("[paymentService.ProcessMercadopagoWebhook] INFO: Payment updated in DB - paymentID=%d, newStatus=%s", payment.ID, newStatus)
 
 	// 9. Actualizar el estado de la orden según el estado del pago
 	order, err := s.orderRepo.FindByID(payment.OrderID)
 	if err != nil {
+		log.Printf("[paymentService.ProcessMercadopagoWebhook] ERROR: Failed to find order - orderID=%d: %v", payment.OrderID, err)
 		return fmt.Errorf("error finding order: %w", err)
 	}
 
+	oldOrderStatus := order.Status
 	switch newStatus {
 	case paymentStatus.Approved:
 		// Cambiar orden a CONFIRMED
@@ -350,10 +405,11 @@ func (s *paymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook 
 
 	order.UpdatedAt = time.Now()
 	if err := s.orderRepo.Update(order); err != nil {
+		log.Printf("[paymentService.ProcessMercadopagoWebhook] ERROR: Failed to update order - orderID=%d: %v", order.ID, err)
 		return fmt.Errorf("error updating order status: %w", err)
 	}
+	log.Printf("[paymentService.ProcessMercadopagoWebhook] INFO: Webhook processed successfully - paymentID=%d, newPaymentStatus=%s, oldOrderStatus=%s, newOrderStatus=%s", payment.ID, newStatus, oldOrderStatus, order.Status)
 
-	fmt.Printf("Successfully processed webhook for payment ID %s, status: %s\n", webhook.Data.ID, newStatus)
 	return nil
 }
 
@@ -382,10 +438,14 @@ func mapMercadopagoStatusToLocalStatus(mpStatus string) string {
 }
 
 func (s *paymentService) ListAllPayments(limit, offset int) ([]models.PaymentResponse, error) {
+	log.Printf("[paymentService.ListAllPayments] INFO: Listing all payments - limit=%d, offset=%d", limit, offset)
+	
 	payments, err := s.paymentRepo.ListAll(limit, offset)
 	if err != nil {
+		log.Printf("[paymentService.ListAllPayments] ERROR: Failed to list payments: %v", err)
 		return nil, fmt.Errorf("error listing payments: %w", err)
 	}
+	log.Printf("[paymentService.ListAllPayments] INFO: Payments listed - paymentCount=%d", len(payments))
 
 	var responses []models.PaymentResponse
 	for _, payment := range payments {

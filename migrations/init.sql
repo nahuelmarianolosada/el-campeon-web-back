@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS product_variants
     updated_at TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP       NULL,
 
-    FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+    CONSTRAINT fk_product_variants_product FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
     KEY idx_product_id (product_id),
     KEY idx_deleted_at (deleted_at)
     ) ENGINE = InnoDB
@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS product_variant_combinations
     updated_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at          TIMESTAMP       NULL,
 
-    FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+    CONSTRAINT fk_product_variant_combinations_product FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
     KEY idx_product_id (product_id),
     KEY idx_sku (sku),
     KEY idx_is_active (is_active),
@@ -103,6 +103,24 @@ CREATE TABLE IF NOT EXISTS product_variant_combinations
     ) ENGINE = InnoDB
     DEFAULT CHARSET = utf8mb4
     COLLATE = utf8mb4_unicode_ci;
+
+-- Tabla: product_images (varias imágenes por producto)
+CREATE TABLE IF NOT EXISTS product_images
+(
+    id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    product_id    INT UNSIGNED NOT NULL,
+    image_url     VARCHAR(500) NOT NULL,
+    display_order INT          NOT NULL DEFAULT 0,
+    created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at    TIMESTAMP    NULL,
+
+    CONSTRAINT fk_product_images_product FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+    KEY idx_product_id (product_id),
+    KEY idx_deleted_at (deleted_at)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS carts (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

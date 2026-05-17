@@ -145,6 +145,13 @@ Lista todos los productos activos con paginación.
       "stock": 50,
       "min_bulk_quantity": 10,
       "image_url": "https://cdn.example.com/libro-1.jpg",
+      "image_urls": [
+        {
+          "id": 1,
+          "image_url": "https://cdn.example.com/libro-1.jpg",
+          "display_order": 0
+        }
+      ],
       "is_active": true,
       "created_at": "2024-04-20T15:30:00Z"
     }
@@ -173,6 +180,13 @@ Obtiene los detalles de un producto específico.
   "stock": 50,
   "min_bulk_quantity": 10,
   "image_url": "https://cdn.example.com/libro-1.jpg",
+  "images": [
+    {
+      "id": 1,
+      "image_url": "https://cdn.example.com/libro-1.jpg",
+      "display_order": 0
+    }
+  ],
   "is_active": true,
   "created_at": "2024-04-20T15:30:00Z"
 }
@@ -215,7 +229,7 @@ Authorization: Bearer <admin_token>
   "price_wholesale": 120.00,
   "stock": 100,
   "min_bulk_quantity": 5,
-  "image_url": "https://cdn.example.com/juguete.jpg"
+  "image_urls": ["https://cdn.example.com/juguete.jpg", "https://cdn.example.com/juguete-2.jpg"]
 }
 ```
 

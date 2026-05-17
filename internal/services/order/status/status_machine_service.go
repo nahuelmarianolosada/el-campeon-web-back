@@ -1,5 +1,7 @@
 package status
 
+import "log"
+
 const (
 	Pending   = "PENDING"
 	Confirmed = "CONFIRMED"
@@ -17,6 +19,7 @@ var validTransitions = map[string][]string{
 }
 
 func IsValidTransition(currentStatus, newStatus string) bool {
+	log.Printf("[orderStatus.IsValidTransition] INFO: Validating transition - current=%s, new=%s", currentStatus, newStatus)
 	validNextStatuses, exists := validTransitions[currentStatus]
 	if !exists {
 		return false
@@ -32,6 +35,7 @@ func IsValidTransition(currentStatus, newStatus string) bool {
 }
 
 func GetNextStatus(currentStatus string) string {
+	log.Printf("[orderStatus.GetNextStatus] INFO: Getting next status - current=%s", currentStatus)
 	if len(validTransitions[currentStatus]) == 0 {
 		return currentStatus
 	}
