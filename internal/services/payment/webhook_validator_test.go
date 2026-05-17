@@ -76,7 +76,7 @@ func TestWebhookValidatorConstantTimeCompare(t *testing.T) {
 			name:     "Different strings same length",
 			a:        "test",
 			b:        "abcd",
-			expected: true,
+			expected: false,
 		},
 		{
 			name:     "Different lengths",
