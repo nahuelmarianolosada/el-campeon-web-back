@@ -19,6 +19,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	// Inicializar repositorios
 	userRepo := repositories.NewUserRepository(db)
 	productRepo := repositories.NewProductRepository(db)
+	productImageRepo := repositories.NewProductImageRepository(db)
 	cartRepo := repositories.NewCartRepository(db)
 	orderRepo := repositories.NewOrderRepository(db)
 	paymentRepo := repositories.NewPaymentRepository(db)
@@ -27,7 +28,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 
 	// Inicializar servicios
 	userService := user.NewUserService(userRepo, cfg)
-	productService := product.NewProductService(productRepo)
+	productService := product.NewProductService(productRepo, productImageRepo)
 	cartService := cart.NewCartService(cartRepo, productRepo, variantRepo)
 	orderService := order.NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 	paymentService := payment.NewPaymentService(paymentRepo, orderRepo, cfg)

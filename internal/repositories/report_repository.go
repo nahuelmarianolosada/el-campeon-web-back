@@ -1,6 +1,8 @@
 package repositories
 
 import (
+	"log"
+
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
 	"gorm.io/gorm"
 )
@@ -20,6 +22,7 @@ func NewReportRepository(db *gorm.DB) ReportRepository {
 }
 
 func (r *reportRepository) GetOrdersReport() ([]models.OrderReportItem, error) {
+	log.Printf("[reportRepository.GetOrdersReport] INFO: Executing orders report query")
 	var report []models.OrderReportItem
 	query := `
 		SELECT 
@@ -40,10 +43,16 @@ func (r *reportRepository) GetOrdersReport() ([]models.OrderReportItem, error) {
 		ORDER BY o.created_at DESC
 	`
 	err := r.db.Raw(query).Scan(&report).Error
+	if err != nil {
+		log.Printf("[reportRepository.GetOrdersReport] ERROR: Failed to execute query: %v", err)
+		return report, err
+	}
+	log.Printf("[reportRepository.GetOrdersReport] INFO: Query executed successfully - itemCount=%d", len(report))
 	return report, err
 }
 
 func (r *reportRepository) GetLowStockProductsReport(limit int) ([]models.LowStockProduct, error) {
+	log.Printf("[reportRepository.GetLowStockProductsReport] INFO: Executing low stock report query - limit=%d", limit)
 	var report []models.LowStockProduct
 	query := `
 		SELECT 
@@ -57,10 +66,16 @@ func (r *reportRepository) GetLowStockProductsReport(limit int) ([]models.LowSto
 		ORDER BY stock ASC
 	`
 	err := r.db.Raw(query, limit).Scan(&report).Error
+	if err != nil {
+		log.Printf("[reportRepository.GetLowStockProductsReport] ERROR: Failed to execute query: %v", err)
+		return report, err
+	}
+	log.Printf("[reportRepository.GetLowStockProductsReport] INFO: Query executed successfully - productCount=%d", len(report))
 	return report, err
 }
 
 func (r *reportRepository) GetDailyRevenueReport() ([]models.DailyRevenue, error) {
+	log.Printf("[reportRepository.GetDailyRevenueReport] INFO: Executing daily revenue report query")
 	var report []models.DailyRevenue
 	query := `
 		SELECT 
@@ -73,5 +88,10 @@ func (r *reportRepository) GetDailyRevenueReport() ([]models.DailyRevenue, error
 		ORDER BY fecha DESC
 	`
 	err := r.db.Raw(query).Scan(&report).Error
+	if err != nil {
+		log.Printf("[reportRepository.GetDailyRevenueReport] ERROR: Failed to execute query: %v", err)
+		return report, err
+	}
+	log.Printf("[reportRepository.GetDailyRevenueReport] INFO: Query executed successfully - dayCount=%d", len(report))
 	return report, err
 }

@@ -51,60 +51,62 @@ func NewUserService(userRepo repositories.UserRepository, cfg *config.Config) Us
 // Register registra un nuevo usuario con rol USER
 // Valida email único, contraseña segura y datos completos
 func (s *userService) Register(req *models.RegisterRequest) (*models.AuthResponse, error) {
+	log.Printf("[userService.Register] INFO: Starting user registration - email=%s", req.Email)
 	// Normalizar y validar inputs
 	if err := s.validateRegisterRequest(req); err != nil {
-		log.Printf("Register validation failed for email %s: %v", req.Email, err)
+		log.Printf("[userService.Register] ERROR: Validation failed - email=%s: %v", req.Email, err)
 		return nil, err
 	}
 
 	// Crear usuario con rol USER
 	user, err := s.createUserWithRole(req.Email, req.FirstName, req.LastName, req.Password, RoleUser, req)
 	if err != nil {
-		log.Printf("Failed to create user with email %s: %v", req.Email, err)
+		log.Printf("[userService.Register] ERROR: Failed to create user - email=%s: %v", req.Email, err)
 		return nil, err
 	}
 
 	// Generar respuesta con tokens
 	authResp, err := s.generateAuthResponse(user)
 	if err != nil {
-		log.Printf("Failed to generate auth response for user %d: %v", user.ID, err)
+		log.Printf("[userService.Register] ERROR: Failed to generate auth response - userID=%d: %v", user.ID, err)
 		return nil, err
 	}
 
-	log.Printf("User registered successfully: %s (ID: %d, Role: %s)", user.Email, user.ID, user.Role)
+	log.Printf("[userService.Register] INFO: User registered successfully - email=%s, userID=%d, role=%s", user.Email, user.ID, user.Role)
 	return authResp, nil
 }
 
 // RegisterAdmin registra un nuevo usuario con rol ADMIN
 // Solo debe ser llamado desde handlers protegidos por middleware admin
 func (s *userService) RegisterAdmin(req *models.RegisterAdminRequest) (*models.AuthResponse, error) {
+	log.Printf("[userService.RegisterAdmin] INFO: Starting admin registration - email=%s, requestedRole=%s", req.Email, req.Role)
 	// Validar request
 	if err := s.validateRegisterRequest(&req.RegisterRequest); err != nil {
-		log.Printf("RegisterAdmin validation failed for email %s: %v", req.Email, err)
+		log.Printf("[userService.RegisterAdmin] ERROR: Validation failed - email=%s: %v", req.Email, err)
 		return nil, err
 	}
 
 	// Validar rol
 	if err := s.validateRole(req.Role); err != nil {
-		log.Printf("RegisterAdmin invalid role %s: %v", req.Role, err)
+		log.Printf("[userService.RegisterAdmin] ERROR: Invalid role - email=%s, role=%s: %v", req.Email, req.Role, err)
 		return nil, err
 	}
 
 	// Crear usuario con rol solicitado
 	user, err := s.createUserWithRole(req.Email, req.FirstName, req.LastName, req.Password, req.Role, &req.RegisterRequest)
 	if err != nil {
-		log.Printf("Failed to create admin user with email %s: %v", req.Email, err)
+		log.Printf("[userService.RegisterAdmin] ERROR: Failed to create admin user - email=%s: %v", req.Email, err)
 		return nil, err
 	}
 
 	// Generar respuesta con tokens
 	authResp, err := s.generateAuthResponse(user)
 	if err != nil {
-		log.Printf("Failed to generate auth response for admin user %d: %v", user.ID, err)
+		log.Printf("[userService.RegisterAdmin] ERROR: Failed to generate auth response - userID=%d: %v", user.ID, err)
 		return nil, err
 	}
 
-	log.Printf("Admin user registered successfully: %s (ID: %d, Role: %s)", user.Email, user.ID, user.Role)
+	log.Printf("[userService.RegisterAdmin] INFO: Admin user registered successfully - email=%s, userID=%d, role=%s", user.Email, user.ID, user.Role)
 	return authResp, nil
 }
 
@@ -225,6 +227,7 @@ func (s *userService) validateRole(role string) error {
 // Login autentica un usuario y genera tokens JWT
 // Valida credenciales, estado del usuario y retorna tokens
 func (s *userService) Login(req *models.LoginRequest) (*models.AuthResponse, error) {
+	log.Printf("[userService.Login] INFO: Starting login - email=%s", req.Email)
 	// Normalizar email
 	email := strings.TrimSpace(strings.ToLower(req.Email))
 
@@ -232,33 +235,33 @@ func (s *userService) Login(req *models.LoginRequest) (*models.AuthResponse, err
 	user, err := s.userRepo.FindByEmail(email)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Printf("Login attempt with non-existent email: %s", email)
+			log.Printf("[userService.Login] WARNING: Login attempt with non-existent email - email=%s", email)
 			return nil, errService.ErrInvalidCredentials
 		}
-		log.Printf("Database error during login for email %s: %v", email, err)
+		log.Printf("[userService.Login] ERROR: Database error - email=%s: %v", email, err)
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 
 	// Verificar contraseña
 	if !utils.VerifyPassword(req.Password, user.Password) {
-		log.Printf("Failed password verification for user: %s", email)
+		log.Printf("[userService.Login] WARNING: Password verification failed - email=%s", email)
 		return nil, errService.ErrInvalidCredentials
 	}
 
 	// Verificar que el usuario esté activo
 	if !user.IsActive {
-		log.Printf("Login attempt by inactive user: %s", email)
+		log.Printf("[userService.Login] WARNING: Login attempt by inactive user - email=%s", email)
 		return nil, errService.ErrUserInactive
 	}
 
 	// Generar respuesta con tokens
 	authResp, err := s.generateAuthResponse(user)
 	if err != nil {
-		log.Printf("Failed to generate tokens for user %d: %v", user.ID, err)
+		log.Printf("[userService.Login] ERROR: Failed to generate tokens - userID=%d: %v", user.ID, err)
 		return nil, err
 	}
 
-	log.Printf("User logged in successfully: %s (ID: %d)", user.Email, user.ID)
+	log.Printf("[userService.Login] INFO: User logged in successfully - email=%s, userID=%d", user.Email, user.ID)
 	return authResp, nil
 }
 
@@ -283,38 +286,47 @@ func (s *userService) userToResponse(user *models.User) models.UserResponse {
 }
 
 func (s *userService) GetUserByID(id uint) (*models.UserResponse, error) {
+	log.Printf("[userService.GetUserByID] INFO: Retrieving user - userID=%d", id)
 	user, err := s.userRepo.FindByID(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Printf("[userService.GetUserByID] WARNING: User not found - userID=%d", id)
 			return nil, fmt.Errorf("user not found: %w", err)
 		}
+		log.Printf("[userService.GetUserByID] ERROR: Database error - userID=%d: %v", id, err)
 		return nil, fmt.Errorf("database error: %w", err)
 	}
-
+	log.Printf("[userService.GetUserByID] INFO: User found - userID=%d, email=%s", id, user.Email)
 	resp := s.userToResponse(user)
 	return &resp, nil
 }
 
 func (s *userService) GetUserByEmail(email string) (*models.UserResponse, error) {
+	log.Printf("[userService.GetUserByEmail] INFO: Retrieving user - email=%s", email)
 	email = strings.TrimSpace(strings.ToLower(email))
 	user, err := s.userRepo.FindByEmail(email)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Printf("[userService.GetUserByEmail] WARNING: User not found - email=%s", email)
 			return nil, fmt.Errorf("user not found: %w", err)
 		}
+		log.Printf("[userService.GetUserByEmail] ERROR: Database error - email=%s: %v", email, err)
 		return nil, fmt.Errorf("database error: %w", err)
 	}
-
+	log.Printf("[userService.GetUserByEmail] INFO: User found - userID=%d, email=%s", user.ID, email)
 	resp := s.userToResponse(user)
 	return &resp, nil
 }
 
 func (s *userService) UpdateUser(id uint, updates *models.User) (*models.UserResponse, error) {
+	log.Printf("[userService.UpdateUser] INFO: Starting user update - userID=%d", id)
 	user, err := s.userRepo.FindByID(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Printf("[userService.UpdateUser] WARNING: User not found - userID=%d", id)
 			return nil, fmt.Errorf("user not found: %w", err)
 		}
+		log.Printf("[userService.UpdateUser] ERROR: Database error - userID=%d: %v", id, err)
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 
@@ -342,54 +354,57 @@ func (s *userService) UpdateUser(id uint, updates *models.User) (*models.UserRes
 	}
 
 	if err = s.userRepo.Update(user); err != nil {
-		log.Printf("Error updating user %d: %v", id, err)
+		log.Printf("[userService.UpdateUser] ERROR: Failed to update user - userID=%d: %v", id, err)
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 
-	log.Printf("User %d updated successfully", id)
+	log.Printf("[userService.UpdateUser] INFO: User updated successfully - userID=%d", id)
 	resp := s.userToResponse(user)
 	return &resp, nil
 }
 
 func (s *userService) RefreshToken(refreshToken string) (*models.AuthResponse, error) {
+	log.Printf("[userService.RefreshToken] INFO: Refreshing token")
 	claims, err := utils.ValidateRefreshToken(refreshToken, s.config)
 	if err != nil {
-		log.Printf("Invalid refresh token: %v", err)
+		log.Printf("[userService.RefreshToken] ERROR: Invalid refresh token: %v", err)
 		return nil, errors.New("invalid or expired refresh token")
 	}
 
 	user, err := s.userRepo.FindByID(claims.UserID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Printf("Refresh token user not found: ID %d", claims.UserID)
+			log.Printf("[userService.RefreshToken] WARNING: User not found - userID=%d", claims.UserID)
 			return nil, fmt.Errorf("user not found: %w", err)
 		}
-		log.Printf("Database error fetching user %d: %v", claims.UserID, err)
+		log.Printf("[userService.RefreshToken] ERROR: Database error - userID=%d: %v", claims.UserID, err)
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 
 	if !user.IsActive {
-		log.Printf("Refresh token attempt by inactive user: %d", user.ID)
+		log.Printf("[userService.RefreshToken] WARNING: Refresh token attempt by inactive user - userID=%d", user.ID)
 		return nil, errService.ErrUserInactive
 	}
 
 	// Generar nuevo access token (mantener mismo refresh token)
 	authResp, err := s.generateAuthResponse(user)
 	if err != nil {
-		log.Printf("Failed to generate new tokens for user %d: %v", user.ID, err)
+		log.Printf("[userService.RefreshToken] ERROR: Failed to generate tokens - userID=%d: %v", user.ID, err)
 		return nil, err
 	}
 
-	log.Printf("Tokens refreshed for user %d", user.ID)
+	log.Printf("[userService.RefreshToken] INFO: Tokens refreshed successfully - userID=%d", user.ID)
 	return authResp, nil
 }
 
 func (s *userService) ListUsers(limit, offset int) ([]models.UserResponse, error) {
+	log.Printf("[userService.ListUsers] INFO: Listing users - limit=%d, offset=%d", limit, offset)
 	users, err := s.userRepo.FindAll(limit, offset)
 	if err != nil {
-		log.Printf("Error listing users: %v", err)
+		log.Printf("[userService.ListUsers] ERROR: Database error: %v", err)
 		return nil, fmt.Errorf("database error: %w", err)
 	}
+	log.Printf("[userService.ListUsers] INFO: Users listed successfully - count=%d", len(users))
 
 	responses := make([]models.UserResponse, len(users))
 	for i, user := range users {
@@ -400,17 +415,20 @@ func (s *userService) ListUsers(limit, offset int) ([]models.UserResponse, error
 }
 
 func (s *userService) SetBulkBuyer(userID uint, isBulk bool) error {
+	log.Printf("[userService.SetBulkBuyer] INFO: Setting bulk buyer status - userID=%d, isBulk=%v", userID, isBulk)
 	user, err := s.userRepo.FindByID(userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Printf("[userService.SetBulkBuyer] WARNING: User not found - userID=%d", userID)
 			return fmt.Errorf("user not found: %w", err)
 		}
+		log.Printf("[userService.SetBulkBuyer] ERROR: Database error - userID=%d: %v", userID, err)
 		return fmt.Errorf("database error: %w", err)
 	}
 
 	user.IsBulkBuyer = isBulk
 	if err := s.userRepo.Update(user); err != nil {
-		log.Printf("Error updating bulk buyer status for user %d: %v", userID, err)
+		log.Printf("[userService.SetBulkBuyer] ERROR: Failed to update bulk buyer status - userID=%d: %v", userID, err)
 		return fmt.Errorf("database error: %w", err)
 	}
 
@@ -418,6 +436,6 @@ func (s *userService) SetBulkBuyer(userID uint, isBulk bool) error {
 	if !isBulk {
 		action = "disabled"
 	}
-	log.Printf("Bulk buyer status %s for user %d", action, userID)
+	log.Printf("[userService.SetBulkBuyer] INFO: Bulk buyer status %s successfully - userID=%d", action, userID)
 	return nil
 }

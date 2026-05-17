@@ -129,7 +129,6 @@ CREATE TABLE products (
   price_wholesale DECIMAL(10, 2) NOT NULL,
   stock INT NOT NULL DEFAULT 0,
   min_bulk_quantity INT NOT NULL DEFAULT 10,
-  image_url VARCHAR(500),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -142,7 +141,22 @@ CREATE TABLE products (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
-### 2.3 Tabla: carts
+### 2.3 Tabla: product_images
+
+```sql
+CREATE TABLE product_images (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  product_id INT UNSIGNED NOT NULL,
+  image_url VARCHAR(500) NOT NULL,
+  display_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at TIMESTAMP NULL,
+  FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+);
+```
+
+### 2.4 Tabla: carts
 
 ```sql
 CREATE TABLE carts (

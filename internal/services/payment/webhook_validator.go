@@ -3,6 +3,7 @@ package payment
 import (
 	"crypto/sha256"
 	"fmt"
+	"log"
 	"strings"
 )
 
@@ -22,6 +23,7 @@ func NewWebhookValidator(publicKey string) *WebhookValidator {
 // La firma se encuentra en el header X-Signature en formato: ts=<timestamp>,v1=<signature>
 // La firma se calcula como: HMAC-SHA256(base_id.timestamp.public_key, access_token)
 func (v *WebhookValidator) ValidateSignature(xSignature string, topic string, dataID string, accessToken string) bool {
+	log.Printf("[WebhookValidator.ValidateSignature] INFO: Validating webhook signature - topic=%s, dataID=%s", topic, dataID)
 	// Parsear el header X-Signature
 	signatureParts := strings.Split(xSignature, ",")
 	var timestamp string
@@ -37,6 +39,7 @@ func (v *WebhookValidator) ValidateSignature(xSignature string, topic string, da
 	}
 
 	if timestamp == "" || signature == "" {
+		log.Printf("[WebhookValidator.ValidateSignature] WARNING: Missing timestamp or signature in header - xSignature=%s", xSignature)
 		return false
 	}
 
@@ -52,7 +55,13 @@ func (v *WebhookValidator) ValidateSignature(xSignature string, topic string, da
 
 	// La firma en el header ya es el hash hexadecimal
 	// Comparar de forma segura
-	return constantTimeCompare(computedSignature, signature)
+	isValid := constantTimeCompare(computedSignature, signature)
+	if !isValid {
+		log.Printf("[WebhookValidator.ValidateSignature] WARNING: Signature mismatch - computed=%s, received=%s", computedSignature, signature)
+	} else {
+		log.Printf("[WebhookValidator.ValidateSignature] INFO: Signature validated successfully")
+	}
+	return isValid
 }
 
 // constantTimeCompare compara dos strings en tiempo constante para evitar timing attacks

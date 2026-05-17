@@ -88,11 +88,31 @@ func (m *MockProductRepository) UpdateStock(id uint, quantity int) error {
 	return nil
 }
 
+// Mock Product Image Repository
+type MockProductImageRepository struct {
+	images map[uint][]models.ProductImage
+}
+
+func NewMockProductImageRepository() *MockProductImageRepository {
+	return &MockProductImageRepository{
+		images: make(map[uint][]models.ProductImage),
+	}
+}
+
+func (m *MockProductImageRepository) FindByProductID(productID uint) ([]models.ProductImage, error) {
+	return m.images[productID], nil
+}
+
+func (m *MockProductImageRepository) ReplaceForProduct(productID uint, images []models.ProductImage) error {
+	m.images[productID] = images
+	return nil
+}
+
 // Tests del ProductService
 
 func TestCreateProductSuccess(t *testing.T) {
 	repo := NewMockProductRepository()
-	service := NewProductService(repo)
+	service := NewProductService(repo, NewMockProductImageRepository())
 
 	req := &models.CreateProductRequest{
 		SKU:             "LIB-001",
@@ -130,7 +150,7 @@ func TestGetPriceRetail(t *testing.T) {
 	repo := NewMockProductRepository()
 	repo.products[1] = product
 
-	service := NewProductService(repo)
+	service := NewProductService(repo, NewMockProductImageRepository())
 
 	// Usuario regular con cantidad < mínimo
 	price, err := service.GetPrice(1, false, 3)
@@ -154,7 +174,7 @@ func TestGetPriceWholesale(t *testing.T) {
 	repo := NewMockProductRepository()
 	repo.products[1] = product
 
-	service := NewProductService(repo)
+	service := NewProductService(repo, NewMockProductImageRepository())
 
 	// Usuario mayorista con cantidad >= mínimo
 	price, err := service.GetPrice(1, true, 10)
