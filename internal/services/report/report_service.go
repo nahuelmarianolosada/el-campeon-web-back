@@ -29,6 +29,9 @@ func (s *reportService) GetOrdersReport() ([]models.OrderReportItem, error) {
 		log.Printf("[reportService.GetOrdersReport] ERROR: Failed to retrieve report: %v", err)
 		return nil, err
 	}
+	if report == nil {
+		report = []models.OrderReportItem{}
+	}
 	log.Printf("[reportService.GetOrdersReport] INFO: Orders report retrieved - itemCount=%d", len(report))
 	return report, nil
 }
@@ -46,6 +49,9 @@ func (s *reportService) GetLowStockProductsReport(limit int) ([]models.LowStockP
 		log.Printf("[reportService.GetLowStockProductsReport] ERROR: Failed to retrieve report: %v", err)
 		return nil, err
 	}
+	if report == nil {
+		report = []models.LowStockProduct{}
+	}
 	log.Printf("[reportService.GetLowStockProductsReport] INFO: Low stock products report retrieved - productCount=%d", len(report))
 	return report, nil
 }
@@ -57,6 +63,9 @@ func (s *reportService) GetDailyRevenueReport() ([]models.DailyRevenue, error) {
 	if err != nil {
 		log.Printf("[reportService.GetDailyRevenueReport] ERROR: Failed to retrieve report: %v", err)
 		return nil, err
+	}
+	if report == nil {
+		report = []models.DailyRevenue{}
 	}
 	log.Printf("[reportService.GetDailyRevenueReport] INFO: Daily revenue report retrieved - dayCount=%d", len(report))
 	return report, nil

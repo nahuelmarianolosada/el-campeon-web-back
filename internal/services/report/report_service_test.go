@@ -67,6 +67,20 @@ func TestGetOrdersReport(t *testing.T) {
 			t.Error("Expected error, got nil")
 		}
 	})
+
+	t.Run("Empty returns empty slice instead of nil", func(t *testing.T) {
+		mockRepo.GetOrdersReportFunc = func() ([]models.OrderReportItem, error) {
+			return nil, nil
+		}
+
+		result, err := service.GetOrdersReport()
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+		if result == nil {
+			t.Error("Expected empty slice, got nil")
+		}
+	})
 }
 
 func TestGetLowStockProductsReport(t *testing.T) {
@@ -115,6 +129,20 @@ func TestGetLowStockProductsReport(t *testing.T) {
 			t.Error("Expected error, got nil")
 		}
 	})
+
+	t.Run("Empty returns empty slice instead of nil", func(t *testing.T) {
+		mockRepo.GetLowStockProductsReportFunc = func(limit int) ([]models.LowStockProduct, error) {
+			return nil, nil
+		}
+
+		result, err := service.GetLowStockProductsReport(10)
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+		if result == nil {
+			t.Error("Expected empty slice, got nil")
+		}
+	})
 }
 
 func TestGetDailyRevenueReport(t *testing.T) {
@@ -147,6 +175,20 @@ func TestGetDailyRevenueReport(t *testing.T) {
 		_, err := service.GetDailyRevenueReport()
 		if err == nil {
 			t.Error("Expected error, got nil")
+		}
+	})
+
+	t.Run("Empty returns empty slice instead of nil", func(t *testing.T) {
+		mockRepo.GetDailyRevenueReportFunc = func() ([]models.DailyRevenue, error) {
+			return nil, nil
+		}
+
+		result, err := service.GetDailyRevenueReport()
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+		if result == nil {
+			t.Error("Expected empty slice, got nil")
 		}
 	})
 }
