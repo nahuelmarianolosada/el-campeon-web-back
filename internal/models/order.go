@@ -10,8 +10,9 @@ import (
 type Order struct {
 	ID              uint              `gorm:"primaryKey" json:"id"`
 	OrderNumber     string            `gorm:"type:varchar(50);uniqueIndex;not null" json:"order_number"`
-	UserID          uint              `gorm:"not null" json:"user_id"`
+	UserID          *uint             `gorm:"index" json:"user_id,omitempty"` // Nullable for guest orders
 	User            *User             `gorm:"foreignKey:UserID" json:"-"`
+	GuestEmail      string            `gorm:"type:varchar(255);index" json:"guest_email,omitempty"` // Email para órdenes guest
 	Items           []OrderItem       `gorm:"foreignKey:OrderID" json:"items,omitempty"`
 	Status          string            `gorm:"type:ENUM('PENDING','CONFIRMED','SHIPPED','DELIVERED','CANCELLED');default:'PENDING'" json:"status"`
 	Subtotal        float64           `gorm:"not null" json:"subtotal"`
@@ -45,6 +46,7 @@ type OrderResponse struct {
 	ID              uint                   `json:"id"`
 	OrderNumber     string                 `json:"order_number"`
 	UserID          uint                   `json:"user_id"`
+	GuestEmail      string                 `json:"guest_email,omitempty"`
 	Items           []OrderItemResponse    `json:"items"`
 	Status          string                 `json:"status"`
 	Subtotal        float64                `json:"subtotal"`

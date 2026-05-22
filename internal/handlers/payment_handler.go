@@ -55,6 +55,39 @@ func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 	c.JSON(http.StatusCreated, payment)
 }
 
+// CreateGuestPayment crea un pago para una orden guest (sin autenticación)
+// @Summary Crear pago de invitado
+// @Tags Pagos
+// @Accept json
+// @Produce json
+// @Param request body models.CreateGuestPaymentRequest true "Datos del pago guest"
+// @Success 201 {object} models.PaymentResponse
+// @Failure 400 {object} gin.H
+// @Router /api/payments/guest [post]
+func (h *PaymentHandler) CreateGuestPayment(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var req models.CreateGuestPaymentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Obtener email del contexto si es guest
+	guestEmail, exists := c.Get("guest_email")
+	if exists {
+		req.Email = guestEmail.(string)
+	}
+
+	payment, err := h.paymentService.CreateGuestPayment(ctx, &req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, payment)
+}
+
 // GetPayment obtiene un pago por ID
 // @Summary Obtener pago por ID
 // @Tags Pagos

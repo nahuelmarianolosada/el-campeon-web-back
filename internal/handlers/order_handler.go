@@ -51,6 +51,45 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	c.JSON(http.StatusCreated, order)
 }
 
+// CreateGuestOrder crea una orden desde un carrito guest (sin autenticación)
+// @Summary Crear orden de invitado
+// @Tags Órdenes
+// @Accept json
+// @Produce json
+// @Param request body models.CreateGuestOrderRequest true "Datos de la orden guest"
+// @Success 201 {object} models.OrderResponse
+// @Failure 400 {object} gin.H
+// @Router /api/orders/guest [post]
+func (h *OrderHandler) CreateGuestOrder(c *gin.Context) {
+	var req models.CreateGuestOrderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Si es guest, obtener email y user_id del contexto si existen
+	guestEmail, existsEmail := c.Get("guest_email")
+	if existsEmail {
+		req.GuestEmail = guestEmail.(string)
+	}
+
+	guestUserID, existsUserID := c.Get("user_id")
+	if existsUserID && guestUserID != nil {
+		uid := guestUserID.(*uint)
+		if uid != nil {
+			req.UserID = *uid
+		}
+	}
+
+	order, err := h.orderService.CreateGuestOrder(&req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, order)
+}
+
 // GetOrder obtiene una orden por ID
 // @Summary Obtener orden por ID
 // @Tags Órdenes

@@ -110,3 +110,36 @@ func ValidateRefreshToken(tokenString string, cfg *config.Config) (*JWTClaims, e
 
 	return claims, nil
 }
+
+// GenerateGuestToken genera un JWT para sesión de invitado (corta duración)
+func GenerateGuestToken(userID uint, email string, cfg *config.Config) (string, error) {
+	expiryTime := time.Now().Add(2 * time.Hour) // Token guest válido 2 horas
+	claims := &JWTClaims{
+		UserID:    userID,
+		Email:     email,
+		Role:      "GUEST",
+		TokenType: "guest",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expiryTime),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "el-campeon-web",
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(cfg.JWTSecretKey))
+}
+
+// ValidateGuestToken valida específicamente un token de invitado
+func ValidateGuestToken(tokenString string, cfg *config.Config) (*JWTClaims, error) {
+	claims, err := ValidateToken(tokenString, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	if claims.TokenType != "guest" {
+		return nil, errors.New("invalid token type")
+	}
+
+	return claims, nil
+}

@@ -14,6 +14,11 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+// Helper para punteros a uint
+func uintPtr(u uint) *uint {
+	return &u
+}
+
 // Mocks
 
 type MockMercadopagoClient struct {
@@ -190,7 +195,7 @@ func TestCreatePayment(t *testing.T) {
 
 	order := &models.Order{
 		ID:     1,
-		UserID: 1,
+		UserID: uintPtr(1),
 		Total:  100.0,
 		Status: orderStatus.Pending,
 		User: &models.User{
@@ -343,8 +348,8 @@ func TestGetPaymentsByUserID(t *testing.T) {
 	service := NewPaymentService(paymentRepo, nil, nil)
 
 	payments := []models.Payment{
-		{ID: 1, UserID: 100},
-		{ID: 2, UserID: 100},
+		{ID: 1, UserID: uintPtr(100)},
+		{ID: 2, UserID: uintPtr(100)},
 	}
 
 	t.Run("Success", func(t *testing.T) {
@@ -588,7 +593,7 @@ func TestProcessMercadopagoWebhook(t *testing.T) {
 
 		order := &models.Order{
 			ID:     1,
-			UserID: 1,
+			UserID: uintPtr(1),
 			Status: orderStatus.Pending,
 		}
 

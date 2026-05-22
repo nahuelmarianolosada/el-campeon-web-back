@@ -9,6 +9,11 @@ import (
 	"gorm.io/gorm"
 )
 
+// Helper para punteros a uint
+func uintPtr(u uint) *uint {
+	return &u
+}
+
 // ============ Mock Repositories ============
 
 // MockOrderRepository
@@ -68,7 +73,7 @@ func (m *MockOrderRepository) FindByUserID(userID uint, _, _ int) ([]models.Orde
 
 	var orders []models.Order
 	for _, order := range m.orders {
-		if order.UserID == userID {
+		if order.UserID != nil && *order.UserID == userID {
 			orders = append(orders, *order)
 		}
 	}
@@ -291,6 +296,120 @@ func (m *MockPaymentRepository) UpdateStatus(paymentID uint, status string) erro
 	return args.Error(0)
 }
 
+type MockProductRepository struct {
+	mock.Mock
+}
+
+func (m *MockProductRepository) Create(product *models.Product) error { return nil }
+func (m *MockProductRepository) FindByID(id uint) (*models.Product, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Product), args.Error(1)
+}
+func (m *MockProductRepository) FindBySKU(sku string) (*models.Product, error) {
+	args := m.Called(sku)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Product), args.Error(1)
+}
+func (m *MockProductRepository) Update(product *models.Product) error { return nil }
+func (m *MockProductRepository) Delete(id uint) error                 { return nil }
+func (m *MockProductRepository) FindAll(limit, offset int) ([]models.Product, error) {
+	return nil, nil
+}
+func (m *MockProductRepository) FindByCategory(category string, limit, offset int) ([]models.Product, error) {
+	return nil, nil
+}
+func (m *MockProductRepository) FindActive(limit, offset int) ([]models.Product, error) {
+	return nil, nil
+}
+func (m *MockProductRepository) UpdateStock(id uint, quantity int) error { return nil }
+
+type MockProductVariantRepository struct {
+	mock.Mock
+}
+
+func (m *MockProductVariantRepository) CreateVariant(variant *models.ProductVariant) error {
+	return nil
+}
+func (m *MockProductVariantRepository) FindVariantByID(id uint) (*models.ProductVariant, error) {
+	return nil, nil
+}
+func (m *MockProductVariantRepository) FindVariantsByProductID(productID uint) ([]models.ProductVariant, error) {
+	return nil, nil
+}
+func (m *MockProductVariantRepository) FindVariantsByProductIDAndValue(productID uint, value string) ([]models.ProductVariant, error) {
+	return nil, nil
+}
+func (m *MockProductVariantRepository) UpdateVariant(variant *models.ProductVariant) error {
+	return nil
+}
+func (m *MockProductVariantRepository) DeleteVariant(id uint) error { return nil }
+func (m *MockProductVariantRepository) CreateVariantValue(value *models.ProductVariantValue) (*models.ProductVariantValue, error) {
+	return nil, nil
+}
+func (m *MockProductVariantRepository) FindVariantValueByID(id uint) (*models.ProductVariantValue, error) {
+	return nil, nil
+}
+func (m *MockProductVariantRepository) FindVariantValuesByVariantID(variantID uint) ([]models.ProductVariantValue, error) {
+	return nil, nil
+}
+func (m *MockProductVariantRepository) UpdateVariantValue(value *models.ProductVariantValue) error {
+	return nil
+}
+func (m *MockProductVariantRepository) DeleteVariantValue(id uint) error { return nil }
+func (m *MockProductVariantRepository) DeleteVariantValuesByVariantID(variantID uint) error {
+	return nil
+}
+func (m *MockProductVariantRepository) CreateVariantCombination(combination *models.ProductVariantCombination) error {
+	return nil
+}
+func (m *MockProductVariantRepository) FindVariantCombinationByID(id uint) (*models.ProductVariantCombination, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.ProductVariantCombination), args.Error(1)
+}
+func (m *MockProductVariantRepository) FindVariantCombinationsByProductID(productID uint, limit int, offset int) ([]models.ProductVariantCombination, error) {
+	return nil, nil
+}
+func (m *MockProductVariantRepository) FindVariantCombinationBySKU(sku string) (*models.ProductVariantCombination, error) {
+	args := m.Called(sku)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.ProductVariantCombination), args.Error(1)
+}
+func (m *MockProductVariantRepository) UpdateVariantCombination(combination *models.ProductVariantCombination) error {
+	return nil
+}
+func (m *MockProductVariantRepository) DeleteVariantCombination(id uint) error { return nil }
+func (m *MockProductVariantRepository) UpdateVariantCombinationStock(id uint, quantity int) error {
+	return nil
+}
+
+type MockGuestRepository struct{}
+
+func (m *MockGuestRepository) CreateGuestSession(session *models.GuestSession) error {
+	return nil
+}
+func (m *MockGuestRepository) FindGuestSessionByEmail(email string) (*models.GuestSession, error) {
+	return nil, nil
+}
+func (m *MockGuestRepository) UpdateGuestSession(session *models.GuestSession) error {
+	return nil
+}
+func (m *MockGuestRepository) CountVerificationAttemptsByIP(ip string, minutesWindow int) (int, error) {
+	return 0, nil
+}
+func (m *MockGuestRepository) DeleteExpiredSessions() (int64, error) {
+	return 0, nil
+}
+
 // ============ Tests ============
 
 func TestCreateOrder_Success(t *testing.T) {
@@ -298,8 +417,11 @@ func TestCreateOrder_Success(t *testing.T) {
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
 	paymentRepo := &MockPaymentRepository{}
+	productRepo := &MockProductRepository{}
+	variantRepo := &MockProductVariantRepository{}
+	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
 
 	// Setup: Crear carrito con items
 	cart := &models.Cart{
@@ -363,8 +485,11 @@ func TestCreateOrder_EmptyCart(t *testing.T) {
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
 	paymentRepo := &MockPaymentRepository{}
+	productRepo := &MockProductRepository{}
+	variantRepo := &MockProductVariantRepository{}
+	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
 
 	// Setup: Carrito vacío
 	cart := &models.Cart{
@@ -391,8 +516,11 @@ func TestCreateOrder_CalculatesTax(t *testing.T) {
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
 	paymentRepo := &MockPaymentRepository{}
+	productRepo := &MockProductRepository{}
+	variantRepo := &MockProductVariantRepository{}
+	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
 
 	// Setup: Crear carrito
 	cart := &models.Cart{
@@ -431,18 +559,79 @@ func TestCreateOrder_CalculatesTax(t *testing.T) {
 	}
 }
 
+func TestCreateGuestOrder_Success(t *testing.T) {
+	orderRepo := NewMockOrderRepository()
+	cartRepo := NewMockOrderCartRepository()
+	userRepo := &MockOrderUserRepository{}
+	paymentRepo := &MockPaymentRepository{}
+	productRepo := &MockProductRepository{}
+	variantRepo := &MockProductVariantRepository{}
+	guestRepo := &MockGuestRepository{}
+
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
+
+	// Setup products
+	product := &models.Product{
+		ID:          1,
+		Name:        "Simple Product",
+		SKU:         "SIMPLE-123",
+		PriceRetail: 100.0,
+	}
+	variantRepo.On("FindVariantCombinationBySKU", "SIMPLE-123").Return(nil, gorm.ErrRecordNotFound)
+	productRepo.On("FindBySKU", "SIMPLE-123").Return(product, nil)
+
+	req := &models.CreateGuestOrderRequest{
+		GuestName:  "Guest User",
+		GuestEmail: "guest@example.com",
+		Items: []models.GuestCartItem{
+			{
+				SKU:      "SIMPLE-123",
+				Quantity: 2,
+				Price:    100.0,
+			},
+		},
+		ShippingAddress: map[string]interface{}{
+			"street": "Guest St 123",
+		},
+		DeliveryMethod: "shipping",
+	}
+
+	resp, err := service.CreateGuestOrder(req)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if resp.GuestEmail != "guest@example.com" {
+		t.Fatalf("Expected guest email guest@example.com, got %s", resp.GuestEmail)
+	}
+
+	if resp.Subtotal != 200.0 {
+		t.Fatalf("Expected subtotal 200.0, got %.2f", resp.Subtotal)
+	}
+
+	if len(resp.Items) != 1 {
+		t.Fatalf("Expected 1 item, got %d", len(resp.Items))
+	}
+
+	productRepo.AssertExpectations(t)
+}
+
 func TestGetOrderByID_Success(t *testing.T) {
 	orderRepo := NewMockOrderRepository()
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
 	paymentRepo := &MockPaymentRepository{}
+	productRepo := &MockProductRepository{}
+	variantRepo := &MockProductVariantRepository{}
+	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
 
 	// Setup: Crear orden
 	order := &models.Order{
 		OrderNumber: "ORD-12345",
-		UserID:      1,
+		UserID:      uintPtr(1),
 		Status:      status.Pending,
 		Subtotal:    100.0,
 		Tax:         21.0,
@@ -482,13 +671,16 @@ func TestGetOrdersByUserID_Success(t *testing.T) {
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
 	paymentRepo := &MockPaymentRepository{}
+	productRepo := &MockProductRepository{}
+	variantRepo := &MockProductVariantRepository{}
+	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
 
 	// Setup: Crear múltiples órdenes para el mismo usuario
 	order1 := &models.Order{
 		OrderNumber: "ORD-001",
-		UserID:      1,
+		UserID:      uintPtr(1),
 		Status:      status.Pending,
 		Subtotal:    100.0,
 		Tax:         21.0,
@@ -496,7 +688,7 @@ func TestGetOrdersByUserID_Success(t *testing.T) {
 	}
 	order2 := &models.Order{
 		OrderNumber: "ORD-002",
-		UserID:      1,
+		UserID:      uintPtr(1),
 		Status:      status.Confirmed,
 		Subtotal:    200.0,
 		Tax:         42.0,
@@ -504,7 +696,7 @@ func TestGetOrdersByUserID_Success(t *testing.T) {
 	}
 	order3 := &models.Order{
 		OrderNumber: "ORD-003",
-		UserID:      2,
+		UserID:      uintPtr(2),
 		Status:      status.Pending,
 		Subtotal:    150.0,
 		Tax:         31.5,
@@ -541,13 +733,16 @@ func TestUpdateOrderStatus_Success(t *testing.T) {
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
 	paymentRepo := &MockPaymentRepository{}
+	productRepo := &MockProductRepository{}
+	variantRepo := &MockProductVariantRepository{}
+	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
 
 	// Setup: Crear orden
 	order := &models.Order{
 		OrderNumber: "ORD-001",
-		UserID:      1,
+		UserID:      uintPtr(1),
 		Status:      status.Pending,
 		Subtotal:    100.0,
 		Tax:         21.0,
@@ -578,13 +773,16 @@ func TestUpdateOrderStatus_InvalidStatus(t *testing.T) {
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
 	paymentRepo := &MockPaymentRepository{}
+	productRepo := &MockProductRepository{}
+	variantRepo := &MockProductVariantRepository{}
+	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
 
 	// Setup: Crear orden
 	order := &models.Order{
 		OrderNumber: "ORD-001",
-		UserID:      1,
+		UserID:      uintPtr(1),
 		Status:      status.Pending,
 	}
 	errCreate := orderRepo.Create(order)
@@ -605,14 +803,17 @@ func TestListAllOrders_Success(t *testing.T) {
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
 	paymentRepo := &MockPaymentRepository{}
+	productRepo := &MockProductRepository{}
+	variantRepo := &MockProductVariantRepository{}
+	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
 
 	// Setup: Crear múltiples órdenes
 	for i := 1; i <= 5; i++ {
 		order := &models.Order{
 			OrderNumber: "ORD-" + string(rune(i)),
-			UserID:      uint(i % 2),
+			UserID:      uintPtr(uint(i % 2)),
 			Status:      status.Pending,
 			Subtotal:    float64(i * 100),
 			Tax:         float64(i * 21),
@@ -641,8 +842,11 @@ func TestGenerateOrderNumber_Unique(t *testing.T) {
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
 	paymentRepo := &MockPaymentRepository{}
+	productRepo := &MockProductRepository{}
+	variantRepo := &MockProductVariantRepository{}
+	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
 
 	// Setup: Crear carrito
 	cart := &models.Cart{
@@ -692,8 +896,11 @@ func BenchmarkCreateOrder(b *testing.B) {
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
 	paymentRepo := &MockPaymentRepository{}
+	productRepo := &MockProductRepository{}
+	variantRepo := &MockProductVariantRepository{}
+	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
 
 	req := &models.CreateOrderRequest{
 		ShippingAddress: map[string]interface{}{
@@ -731,14 +938,17 @@ func BenchmarkGetOrderByID(b *testing.B) {
 	cartRepo := NewMockOrderCartRepository()
 	userRepo := &MockOrderUserRepository{}
 	paymentRepo := &MockPaymentRepository{}
+	productRepo := &MockProductRepository{}
+	variantRepo := &MockProductVariantRepository{}
+	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
 
 	// Setup: Crear órdenes
 	for i := 1; i <= 100; i++ {
 		order := &models.Order{
 			OrderNumber: "ORD-" + string(rune(i)),
-			UserID:      1,
+			UserID:      uintPtr(1),
 			Status:      status.Pending,
 			Subtotal:    100.0,
 			Tax:         21.0,
