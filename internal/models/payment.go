@@ -12,7 +12,7 @@ type Payment struct {
 	TransactionID           string            `gorm:"type:varchar(255);uniqueIndex" json:"transaction_id"`
 	OrderID                 uint              `gorm:"not null;index" json:"order_id"`
 	Order                   *Order            `gorm:"foreignKey:OrderID" json:"-"`
-	UserID                  uint              `gorm:"not null;index" json:"user_id"`
+	UserID                  *uint             `gorm:"index" json:"user_id,omitempty"`
 	User                    *User             `gorm:"foreignKey:UserID" json:"-"`
 	Amount                  float64           `gorm:"not null" json:"amount"`
 	Currency                string            `gorm:"default:'ARS'" json:"currency"`
@@ -38,7 +38,7 @@ type PaymentResponse struct {
 	ID                      uint       `json:"id"`
 	TransactionID           string     `json:"transaction_id"`
 	OrderID                 uint       `json:"order_id"`
-	UserID                  uint       `json:"user_id"`
+	UserID                  *uint      `json:"user_id,omitempty"`
 	Amount                  float64    `json:"amount"`
 	Currency                string     `json:"currency"`
 	Status                  string     `json:"status"`

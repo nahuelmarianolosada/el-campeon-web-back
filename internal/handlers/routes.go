@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"log"
+
 	"github.com/gin-gonic/gin"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/config"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/middleware"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/repositories"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/cart"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/email"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/guest"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/order"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/payment"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/product"
@@ -25,15 +29,24 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	paymentRepo := repositories.NewPaymentRepository(db)
 	reportRepo := repositories.NewReportRepository(db)
 	variantRepo := repositories.NewProductVariantRepository(db)
+	guestRepo := repositories.NewGuestRepository(db)
+
+	// Inicializar servicio de email
+	emailService, err := email.NewMailgunService(cfg)
+	if err != nil {
+		log.Printf("[SetupRoutes] WARNING: Failed to initialize email service: %v", err)
+		emailService = &noOpEmailService{}
+	}
 
 	// Inicializar servicios
 	userService := user.NewUserService(userRepo, cfg)
 	productService := product.NewProductService(productRepo, productImageRepo)
 	cartService := cart.NewCartService(cartRepo, productRepo, variantRepo)
-	orderService := order.NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo)
 	paymentService := payment.NewPaymentService(paymentRepo, orderRepo, cfg)
 	reportService := report.NewReportService(reportRepo)
 	variantService := variant.NewProductVariantService(variantRepo, productRepo)
+	guestService := guest.NewGuestService(guestRepo, userRepo, emailService, cfg)
+	orderService := order.NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
 
 	// Inicializar handlers
 	authHandler := NewAuthHandler(userService)
@@ -43,6 +56,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	paymentHandler := NewPaymentHandler(paymentService)
 	reportHandler := NewReportHandler(reportService)
 	variantHandler := NewProductVariantHandler(variantService)
+	guestHandler := NewGuestHandler(guestService)
 
 	// Auth routes (sin autenticación)
 	authGroup := router.Group("/auth")
@@ -50,6 +64,13 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 		authGroup.POST("/register", authHandler.Register)
 		authGroup.POST("/login", authHandler.Login)
 		authGroup.POST("/refresh", authHandler.RefreshToken)
+	}
+
+	// Guest routes (sin autenticación)
+	guestGroup := router.Group("/api/guest")
+	{
+		guestGroup.POST("/verify-email", guestHandler.VerifyEmail)
+		guestGroup.POST("/confirm-email", guestHandler.ConfirmEmail)
 	}
 
 	// Public product routes
@@ -74,6 +95,19 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	variantSingleRoutes := router.Group("/api/variants")
 	{
 		variantSingleRoutes.GET("/:variantId", variantHandler.GetVariant)
+	}
+
+	// Guest order/payment routes (requieren sesión guest validada)
+	publicOrderGroup := router.Group("/api/orders")
+	publicOrderGroup.Use(middleware.GuestAuthMiddleware(guestService))
+	{
+		publicOrderGroup.POST("/guest", orderHandler.CreateGuestOrder)
+	}
+
+	publicPaymentGroup := router.Group("/api/payments")
+	publicPaymentGroup.Use(middleware.GuestAuthMiddleware(guestService))
+	{
+		publicPaymentGroup.POST("/guest", paymentHandler.CreateGuestPayment)
 	}
 
 	// Protected routes - requieren autenticación
@@ -183,4 +217,17 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 			"service": "el-campeon-web",
 		})
 	})
+}
+
+// noOpEmailService es una implementación no-op cuando email no está configurado
+type noOpEmailService struct{}
+
+func (s *noOpEmailService) SendVerificationCode(toEmail, code string) error {
+	log.Printf("[noOpEmailService] Skipping email send (not configured) - email=%s", toEmail)
+	return nil
+}
+
+func (s *noOpEmailService) SendOrderConfirmation(toEmail, orderNumber string, total float64) error {
+	log.Printf("[noOpEmailService] Skipping email send (not configured) - email=%s, order=%s", toEmail, orderNumber)
+	return nil
 }

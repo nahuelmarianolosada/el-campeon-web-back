@@ -19,6 +19,7 @@ import (
 
 type PaymentService interface {
 	CreatePayment(ctx context.Context, req *models.CreatePaymentRequest) (*models.PaymentResponse, error)
+	CreateGuestPayment(ctx context.Context, req *models.CreateGuestPaymentRequest) (*models.PaymentResponse, error)
 	GetPaymentByID(id uint) (*models.PaymentResponse, error)
 	GetPaymentsByUserID(userID uint, limit, offset int) ([]models.PaymentResponse, error)
 	GetPaymentByOrderID(orderID uint) (*models.PaymentResponse, error)
@@ -101,10 +102,14 @@ func (s *paymentService) CreatePayment(ctx context.Context, req *models.CreatePa
 
 	// Crear pago
 	transactionID := s.generateTransactionID()
+	var userID *uint
+	if order.UserID != nil {
+		userID = order.UserID
+	}
 	payment := &models.Payment{
 		TransactionID: transactionID,
 		OrderID:       req.OrderID,
-		UserID:        order.UserID,
+		UserID:        userID,
 		Amount:        req.Amount,
 		Currency:      "ARS",
 		Status:        paymentStatus.Pending,
@@ -192,6 +197,141 @@ func (s *paymentService) ExecutePayment(ctx context.Context, order models.Order,
 		payer.Email = order.User.Email
 		payer.Name = order.User.FirstName + " " + order.User.LastName
 	}
+
+	request := preferenceMp.Request{
+		Items:               items,
+		ExternalReference:   order.OrderNumber,
+		Payer:               &payer,
+		StatementDescriptor: fmt.Sprintf("Campeon %s", order.OrderNumber),
+	}
+
+	paymentCreated, err := s.mercadopagoClient.CreatePreference(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("mercadopago api error: %w", err)
+	}
+
+	return paymentCreated, nil
+}
+
+// CreateGuestPayment crea un pago para una orden guest (sin usuario autenticado)
+func (s *paymentService) CreateGuestPayment(ctx context.Context, req *models.CreateGuestPaymentRequest) (*models.PaymentResponse, error) {
+	log.Printf("[paymentService.CreateGuestPayment] INFO: Starting guest payment creation - orderID=%d, email=%s, amount=%.2f", req.OrderID, req.Email, req.Amount)
+
+	// Obtener la orden
+	order, err := s.orderRepo.FindByID(req.OrderID)
+	if err != nil {
+		log.Printf("[paymentService.CreateGuestPayment] ERROR: Failed to find order - orderID=%d: %v", req.OrderID, err)
+		return nil, fmt.Errorf("error finding order: %w", err)
+	}
+
+	// Validar que es orden guest y el email coincide
+	if order.GuestEmail == "" {
+		log.Printf("[paymentService.CreateGuestPayment] WARNING: Order is not a guest order - orderID=%d", req.OrderID)
+		return nil, fmt.Errorf("this order is not a guest order")
+	}
+
+	if order.GuestEmail != req.Email {
+		log.Printf("[paymentService.CreateGuestPayment] WARNING: Email mismatch - orderID=%d, expected=%s, got=%s", req.OrderID, order.GuestEmail, req.Email)
+		return nil, fmt.Errorf("email does not match order")
+	}
+
+	// Validar que la orden no esté cancelada
+	if order.Status == orderStatus.Cancelled {
+		log.Printf("[paymentService.CreateGuestPayment] WARNING: Attempt to create payment for cancelled order - orderID=%d", req.OrderID)
+		return nil, fmt.Errorf("cannot create payment for cancelled order")
+	}
+
+	// Verificar que el monto coincide
+	if req.Amount != order.Total {
+		log.Printf("[paymentService.CreateGuestPayment] ERROR: Amount mismatch - orderID=%d, expected=%.2f, received=%.2f", req.OrderID, order.Total, req.Amount)
+		return nil, fmt.Errorf("payment amount does not match order total")
+	}
+
+	// Crear pago (UserID será nil para guest)
+	transactionID := s.generateTransactionID()
+	payment := &models.Payment{
+		TransactionID: transactionID,
+		OrderID:       req.OrderID,
+		UserID:        order.UserID, // Maintain consistency with order's UserID (which is nil for guests)
+		Amount:        req.Amount,
+		Currency:      "ARS",
+		Status:        paymentStatus.Pending,
+		PaymentMethod: req.PaymentMethod,
+	}
+
+	if err := s.paymentRepo.Create(payment); err != nil {
+		log.Printf("[paymentService.CreateGuestPayment] ERROR: Failed to create payment: %v", err)
+		return nil, fmt.Errorf("error creating payment: %w", err)
+	}
+
+	// Para pagos en efectivo
+	if req.PaymentMethod == "CASH" {
+		log.Printf("[paymentService.CreateGuestPayment] INFO: Cash payment created - paymentID=%d, amount=%.2f", payment.ID, req.Amount)
+		return s.toPaymentResponse(payment), nil
+	}
+
+	// Para pagos con MercadoPago
+	log.Printf("[paymentService.CreateGuestPayment] INFO: Processing MercadoPago payment - paymentID=%d", payment.ID)
+	executedPayment, err := s.ExecuteGuestPayment(ctx, *order, req.PaymentMethod, req.Email)
+	if err != nil {
+		log.Printf("[paymentService.CreateGuestPayment] ERROR: Failed to execute MercadoPago payment: %v", err)
+		return nil, fmt.Errorf("error executing payment: %w", err)
+	}
+
+	executedPaymentByte, err := json.Marshal(executedPayment)
+	if err != nil {
+		log.Printf("[paymentService.CreateGuestPayment] ERROR: Failed to marshal executed payment: %v", err)
+		return nil, fmt.Errorf("error marshaling executed payment: %w", err)
+	}
+
+	payment.MercadopagoPreferenceID = executedPayment.ID
+	payment.MercadopagoData = datatypes.JSONMap{
+		"preference": string(executedPaymentByte),
+	}
+	payment.Status = paymentStatus.Pending
+
+	if err := s.paymentRepo.Update(payment); err != nil {
+		log.Printf("[paymentService.CreateGuestPayment] ERROR: Failed to update payment: %v", err)
+		return nil, fmt.Errorf("error updating payment: %w", err)
+	}
+
+	// Actualizar orden a CONFIRMED
+	order.Status = orderStatus.Confirmed
+	order.UpdatedAt = time.Now()
+	if err := s.orderRepo.Update(order); err != nil {
+		log.Printf("[paymentService.CreateGuestPayment] ERROR: Failed to update order status: %v", err)
+		return nil, fmt.Errorf("error updating order status: %w", err)
+	}
+
+	log.Printf("[paymentService.CreateGuestPayment] INFO: Guest payment prepared - paymentID=%d, preferenceID=%s", payment.ID, executedPayment.ID)
+	return s.toPaymentResponse(payment), nil
+}
+
+// ExecuteGuestPayment es similar a ExecutePayment pero usa email de guest en lugar de usuario
+func (s *paymentService) ExecuteGuestPayment(ctx context.Context, order models.Order, paymentMethod, guestEmail string) (*preferenceMp.Response, error) {
+	// If no client is set, create a default one
+	if s.mercadopagoClient == nil {
+		cfg, err := config.New(s.config.MercadopagoAccessToken)
+		if err != nil {
+			return nil, fmt.Errorf("mp config error: %w", err)
+		}
+		client := preferenceMp.NewClient(cfg)
+		s.mercadopagoClient = NewDefaultMercadopagoClient(client, s.config.MercadopagoAccessToken)
+	}
+
+	var items []preferenceMp.ItemRequest
+	for _, item := range order.Items {
+		items = append(items, preferenceMp.ItemRequest{
+			Title:       item.Product.Name,
+			Quantity:    item.Quantity,
+			UnitPrice:   item.Price,
+			Description: item.Product.Description,
+		})
+	}
+
+	// Usar email de guest
+	var payer preferenceMp.PayerRequest
+	payer.Email = guestEmail
 
 	request := preferenceMp.Request{
 		Items:               items,
@@ -439,7 +579,7 @@ func mapMercadopagoStatusToLocalStatus(mpStatus string) string {
 
 func (s *paymentService) ListAllPayments(limit, offset int) ([]models.PaymentResponse, error) {
 	log.Printf("[paymentService.ListAllPayments] INFO: Listing all payments - limit=%d, offset=%d", limit, offset)
-	
+
 	payments, err := s.paymentRepo.ListAll(limit, offset)
 	if err != nil {
 		log.Printf("[paymentService.ListAllPayments] ERROR: Failed to list payments: %v", err)

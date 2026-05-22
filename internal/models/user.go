@@ -20,6 +20,8 @@ type User struct {
 	Role        string `gorm:"type:enum('USER','ADMIN');default:'USER'"`
 	IsActive    bool   `gorm:"default:true"`
 	IsBulkBuyer bool   `gorm:"default:false"`
+	IsAnonymous bool   `gorm:"default:false"`
+	EmailVerified bool  `gorm:"default:false"`
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	DeletedAt   gorm.DeletedAt `gorm:"index"`

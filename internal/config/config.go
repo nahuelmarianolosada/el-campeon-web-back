@@ -24,6 +24,11 @@ type Config struct {
 	MercadopagoAccessToken string
 	MercadopagoPublicKey   string
 
+	// Mailgun Email Service
+	MailgunDomain    string
+	MailgunAPIKey    string
+	MailgunFromEmail string
+
 	// API URLs
 	APIBaseURL string
 }
@@ -42,6 +47,9 @@ func Load() *Config {
 		DBName:                 getEnv("DB_NAME", "el_campeon_web"),
 		MercadopagoAccessToken: getEnv("MERCADOPAGO_ACCESS_TOKEN", ""),
 		MercadopagoPublicKey:   getEnv("MERCADOPAGO_PUBLIC_KEY", ""),
+		MailgunDomain:          getEnv("MAILGUN_DOMAIN", ""),
+		MailgunAPIKey:          getEnv("MAILGUN_API_KEY", ""),
+		MailgunFromEmail:       getEnv("MAILGUN_FROM_EMAIL", "noreply@example.com"),
 		APIBaseURL:             getEnv("API_BASE_URL", "http://localhost:8080"),
 	}
 }

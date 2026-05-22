@@ -13,6 +13,7 @@ import (
 
 type OrderService interface {
 	CreateOrder(userID uint, req *models.CreateOrderRequest) (*models.OrderResponse, error)
+	CreateGuestOrder(req *models.CreateGuestOrderRequest) (*models.OrderResponse, error)
 	GetOrderByID(id uint) (*models.OrderResponse, error)
 	GetOrdersByUserID(userID uint, limit, offset int) ([]models.OrderResponse, error)
 	UpdateOrderStatus(orderID uint, status string) (*models.OrderResponse, error)
@@ -24,6 +25,9 @@ type orderService struct {
 	cartRepo    repositories.CartRepository
 	userRepo    repositories.UserRepository
 	paymentRepo repositories.PaymentRepository
+	productRepo repositories.ProductRepository
+	variantRepo repositories.ProductVariantRepository
+	guestRepo   repositories.GuestRepository
 }
 
 func NewOrderService(
@@ -31,12 +35,18 @@ func NewOrderService(
 	cartRepo repositories.CartRepository,
 	userRepo repositories.UserRepository,
 	paymentRepo repositories.PaymentRepository,
+	productRepo repositories.ProductRepository,
+	variantRepo repositories.ProductVariantRepository,
+	guestRepo repositories.GuestRepository,
 ) OrderService {
 	return &orderService{
 		orderRepo:   orderRepo,
 		cartRepo:    cartRepo,
 		userRepo:    userRepo,
 		paymentRepo: paymentRepo,
+		productRepo: productRepo,
+		variantRepo: variantRepo,
+		guestRepo:   guestRepo,
 	}
 }
 
@@ -77,7 +87,7 @@ func (s *orderService) CreateOrder(userID uint, req *models.CreateOrderRequest) 
 	orderNumber := s.generateOrderNumber()
 	order := &models.Order{
 		OrderNumber:     orderNumber,
-		UserID:          userID,
+		UserID:          &userID,
 		Status:          orderStatusService.Pending,
 		Subtotal:        subtotal,
 		Tax:             tax,
@@ -206,7 +216,7 @@ func (s *orderService) getOrderResponse(order *models.Order) *models.OrderRespon
 	response := &models.OrderResponse{
 		ID:              order.ID,
 		OrderNumber:     order.OrderNumber,
-		UserID:          order.UserID,
+		GuestEmail:      order.GuestEmail,
 		Status:          order.Status,
 		Subtotal:        order.Subtotal,
 		Tax:             order.Tax,
@@ -216,6 +226,11 @@ func (s *orderService) getOrderResponse(order *models.Order) *models.OrderRespon
 		Notes:           order.Notes,
 		CreatedAt:       order.CreatedAt,
 		UpdatedAt:       order.UpdatedAt,
+	}
+
+	// Establecer UserID si no es nulo
+	if order.UserID != nil {
+		response.UserID = *order.UserID
 	}
 
 	// Convertir items
@@ -245,4 +260,108 @@ func (s *orderService) getOrderResponse(order *models.Order) *models.OrderRespon
 	}
 
 	return response
+}
+
+// CreateGuestOrder crea una orden desde un carrito guest
+func (s *orderService) CreateGuestOrder(req *models.CreateGuestOrderRequest) (*models.OrderResponse, error) {
+	log.Printf("[orderService.CreateGuestOrder] INFO: Starting guest order creation - email=%s, itemCount=%d", req.GuestEmail, len(req.Items))
+
+	if len(req.Items) == 0 {
+		return nil, fmt.Errorf("cart is empty")
+	}
+
+	// Validar SKUs y precios, acumular subtotal
+	subtotal := 0.0
+	var resolvedItems []models.OrderItem
+
+	for _, cartItem := range req.Items {
+		// Intentar variante primero
+		variant, err := s.variantRepo.FindVariantCombinationBySKU(cartItem.SKU)
+		if err == nil && variant != nil {
+			product, err := s.productRepo.FindByID(variant.ProductID)
+			if err != nil {
+				return nil, fmt.Errorf("product not found for item %s", cartItem.SKU)
+			}
+			// Calcular precio esperado: precio base + ajuste de variante
+			expectedPrice := product.PriceRetail + variant.PriceAdjustment
+			if cartItem.Price != expectedPrice {
+				return nil, fmt.Errorf("price mismatch for item %s: expected %.2f, got %.2f", cartItem.SKU, expectedPrice, cartItem.Price)
+			}
+			subtotal += float64(cartItem.Quantity) * cartItem.Price
+			resolvedItems = append(resolvedItems, models.OrderItem{
+				ProductID: product.ID,
+				Quantity:  cartItem.Quantity,
+				Price:     cartItem.Price,
+				Product:   product,
+			})
+		} else {
+			// Intentar producto simple
+			product, err := s.productRepo.FindBySKU(cartItem.SKU)
+			if err != nil {
+				return nil, fmt.Errorf("product not found: %s", cartItem.SKU)
+			}
+			if cartItem.Price != product.PriceRetail {
+				return nil, fmt.Errorf("price mismatch for item %s: expected %.2f, got %.2f", cartItem.SKU, product.PriceRetail, cartItem.Price)
+			}
+			subtotal += float64(cartItem.Quantity) * cartItem.Price
+			resolvedItems = append(resolvedItems, models.OrderItem{
+				ProductID: product.ID,
+				Quantity:  cartItem.Quantity,
+				Price:     cartItem.Price,
+				Product:   product,
+			})
+		}
+	}
+
+	// Calcular tax y total
+	tax := subtotal * 0.21
+	total := subtotal + tax
+
+	// Convertir map a JSON
+	shippingData := make(map[string]interface{})
+	for k, v := range req.ShippingAddress {
+		shippingData[k] = v
+	}
+
+	// Crear orden
+	orderNumber := s.generateOrderNumber()
+	order := &models.Order{
+		OrderNumber:     orderNumber,
+		GuestEmail:      req.GuestEmail,
+		Status:          orderStatusService.Pending,
+		Subtotal:        subtotal,
+		Tax:             tax,
+		Total:           total,
+		ShippingAddress: shippingData,
+		DeliveryMethod:  req.DeliveryMethod,
+		Notes:           req.Notes,
+	}
+
+	if req.UserID != 0 {
+		order.UserID = &req.UserID
+	}
+
+	if err := s.orderRepo.Create(order); err != nil {
+		log.Printf("[orderService.CreateGuestOrder] ERROR: Failed to create order: %v", err)
+		return nil, fmt.Errorf("error creating order: %w", err)
+	}
+
+	// Agregar items
+	for _, item := range resolvedItems {
+		orderItem := &models.OrderItem{
+			OrderID:   order.ID,
+			ProductID: item.ProductID,
+			Quantity:  item.Quantity,
+			Price:     item.Price,
+			Product:   item.Product,
+		}
+		if err := s.orderRepo.AddItem(order.ID, orderItem); err != nil {
+			return nil, fmt.Errorf("error adding item to order: %w", err)
+		}
+	}
+
+	order.Items = resolvedItems
+
+	log.Printf("[orderService.CreateGuestOrder] INFO: Guest order created - orderID=%d", order.ID)
+	return s.getOrderResponse(order), nil
 }
