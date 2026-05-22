@@ -52,8 +52,8 @@ func (s *mailgunService) SendVerificationCode(toEmail, code string) error {
 		</html>
 	`, code)
 
-	message := s.mg.NewMessage(s.fromEmail, subject, text, toEmail)
-	message.SetHtml(html)
+	message := mailgun.NewMessage(s.fromEmail, subject, text, toEmail)
+	message.SetHTML(html)
 
 	ctx, cancel := contextWithTimeout()
 	defer cancel()
@@ -84,8 +84,8 @@ func (s *mailgunService) SendOrderConfirmation(toEmail, orderNumber string, tota
 		</html>
 	`, orderNumber, total)
 
-	message := s.mg.NewMessage(s.fromEmail, subject, text, toEmail)
-	message.SetHtml(html)
+	message := mailgun.NewMessage(s.fromEmail, subject, text, toEmail)
+	message.SetHTML(html)
 
 	ctx, cancel := contextWithTimeout()
 	defer cancel()
@@ -112,4 +112,3 @@ func (s *noOpService) SendOrderConfirmation(toEmail, orderNumber string, total f
 	log.Printf("[noOpService.SendOrderConfirmation] WARNING: Mailgun not configured, skipping email - email=%s, order=%s", toEmail, orderNumber)
 	return nil
 }
-

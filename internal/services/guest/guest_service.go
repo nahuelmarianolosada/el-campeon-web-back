@@ -172,7 +172,10 @@ func (s *guestService) ConfirmEmailAndCreateSession(emailAddr, code, clientIP st
 	if err := bcrypt.CompareHashAndPassword([]byte(session.VerificationCodeHash), []byte(code)); err != nil {
 		log.Printf("[guestService.ConfirmEmailAndCreateSession] WARNING: Invalid verification code - email=%s", emailAddr)
 		session.VerificationCodeAttempts++
-		s.guestRepo.UpdateGuestSession(session)
+		if err := s.guestRepo.UpdateGuestSession(session); err != nil {
+			log.Printf("[guestService.ConfirmEmailAndCreateSession] ERROR: Failed to update session: %v", err)
+			return nil, err
+		}
 		return nil, fmt.Errorf("invalid verification code")
 	}
 
