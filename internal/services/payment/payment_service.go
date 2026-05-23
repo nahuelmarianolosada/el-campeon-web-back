@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"github.com/mercadopago/sdk-go/pkg/config"
@@ -95,7 +96,7 @@ func (s *paymentService) CreatePayment(ctx context.Context, req *models.CreatePa
 	}
 
 	// Verificar que el monto coincide
-	if req.Amount != order.Total {
+	if math.Abs(req.Amount-order.Total) > 0.001 {
 		log.Printf("[paymentService.CreatePayment] ERROR: Amount mismatch - orderID=%d, expected=%.2f, received=%.2f", req.OrderID, order.Total, req.Amount)
 		return nil, fmt.Errorf("payment amount does not match order total. expected: %.2f, got: %.2f", order.Total, req.Amount)
 	}
@@ -187,7 +188,7 @@ func (s *paymentService) ExecutePayment(ctx context.Context, order models.Order,
 		items = append(items, preferenceMp.ItemRequest{
 			Title:       item.Product.Name,
 			Quantity:    item.Quantity,
-			UnitPrice:   item.Price,
+			UnitPrice:   item.Price * 1.21,
 			Description: item.Product.Description,
 		})
 	}
@@ -242,7 +243,7 @@ func (s *paymentService) CreateGuestPayment(ctx context.Context, req *models.Cre
 	}
 
 	// Verificar que el monto coincide
-	if req.Amount != order.Total {
+	if math.Abs(req.Amount-order.Total) > 0.001 {
 		log.Printf("[paymentService.CreateGuestPayment] ERROR: Amount mismatch - orderID=%d, expected=%.2f, received=%.2f", req.OrderID, order.Total, req.Amount)
 		return nil, fmt.Errorf("payment amount does not match order total")
 	}
@@ -324,7 +325,7 @@ func (s *paymentService) ExecuteGuestPayment(ctx context.Context, order models.O
 		items = append(items, preferenceMp.ItemRequest{
 			Title:       item.Product.Name,
 			Quantity:    item.Quantity,
-			UnitPrice:   item.Price,
+			UnitPrice:   item.Price * 1.21,
 			Description: item.Product.Description,
 		})
 	}
@@ -477,7 +478,7 @@ func (s *paymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook 
 	log.Printf("[paymentService.ProcessMercadopagoWebhook] INFO: Local payment found - paymentID=%d, orderNumber=%s", payment.ID, paymentDetails.ExternalReference)
 
 	// 5. Verificar que los montos coincidan
-	if paymentDetails.TransactionAmount != payment.Amount {
+	if math.Abs(paymentDetails.TransactionAmount-payment.Amount) > 0.001 {
 		log.Printf("[paymentService.ProcessMercadopagoWebhook] ERROR: Amount mismatch - paymentID=%d, expected=%.2f, received=%.2f", payment.ID, payment.Amount, paymentDetails.TransactionAmount)
 		return fmt.Errorf("payment amount mismatch: expected %.2f, got %.2f", payment.Amount, paymentDetails.TransactionAmount)
 	}
