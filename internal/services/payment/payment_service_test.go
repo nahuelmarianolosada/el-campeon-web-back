@@ -548,7 +548,7 @@ func TestProcessMercadopagoWebhook(t *testing.T) {
 			Type: "other",
 		}
 		ctx := context.Background()
-		err := service.ProcessMercadopagoWebhook(ctx, webhook, "ts=123456,v1=signature")
+		err := service.ProcessMercadopagoWebhook(ctx, webhook, "ts=123456,v1=signature", "req-123")
 		// Ignora webhooks que no sean de pago, retorna nil
 		assert.NoError(t, err)
 	})
@@ -562,7 +562,7 @@ func TestProcessMercadopagoWebhook(t *testing.T) {
 			}{ID: "123"},
 		}
 		ctx := context.Background()
-		err := service.ProcessMercadopagoWebhook(ctx, webhook, "ts=123456,v1=invalidsignature")
+		err := service.ProcessMercadopagoWebhook(ctx, webhook, "ts=123456,v1=invalidsignature", "req-123")
 		// Debe retornar error por firma inválida
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid webhook signature")

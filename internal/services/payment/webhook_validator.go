@@ -1,8 +1,9 @@
 package payment
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
-	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"strings"
@@ -22,50 +23,93 @@ func NewWebhookValidator(publicKey string) *WebhookValidator {
 
 // ValidateSignature valida la firma del webhook de MercadoPago
 // La firma se encuentra en el header X-Signature en formato: ts=<timestamp>,v1=<signature>
-// La firma se calcula como: HMAC-SHA256(base_id.timestamp.public_key, access_token)
-func (v *WebhookValidator) ValidateSignature(xSignature string, topic string, dataID string, accessToken string) bool {
-	log.Printf("[WebhookValidator.ValidateSignature] INFO: Validating webhook signature - topic=%s, dataID=%s", topic, dataID)
-	// Parsear el header X-Signature
-	signatureParts := strings.Split(xSignature, ",")
-	var timestamp string
-	var signature string
+// La firma se calcula como: HMAC-SHA256(manifest, secret)
+// manifest = id:[data.id];request-id:[x-request-id];ts:[ts];
+func (v *WebhookValidator) ValidateSignature(
+	xSignature string,
+	dataID string,
+	xRequestID string,
+	secret string,
+) bool {
 
-	for _, part := range signatureParts {
+	log.Printf(
+		"[WebhookValidator.ValidateSignature] INFO: validating webhook signature - dataID=%s requestID=%s",
+		dataID,
+		xRequestID,
+	)
+
+	// Parse X-Signature
+	var ts string
+	var receivedSignatureHex string
+
+	parts := strings.Split(xSignature, ",")
+
+	for _, part := range parts {
 		part = strings.TrimSpace(part)
+
 		if strings.HasPrefix(part, "ts=") {
-			timestamp = strings.TrimPrefix(part, "ts=")
-		} else if strings.HasPrefix(part, "v1=") {
-			signature = strings.TrimPrefix(part, "v1=")
+			ts = strings.TrimPrefix(part, "ts=")
+		}
+
+		if strings.HasPrefix(part, "v1=") {
+			receivedSignatureHex = strings.TrimPrefix(part, "v1=")
 		}
 	}
 
-	if timestamp == "" || signature == "" {
-		log.Printf("[WebhookValidator.ValidateSignature] WARNING: Missing timestamp or signature in header - xSignature=%s", xSignature)
+	if ts == "" || receivedSignatureHex == "" {
+		log.Printf(
+			"[WebhookValidator.ValidateSignature] ERROR: invalid X-Signature header: %s",
+			xSignature,
+		)
 		return false
 	}
 
-	// Construir el string a verificar: data_id.timestamp
-	// Según la documentación de MercadoPago, es: base_id.timestamp
-	verifyString := fmt.Sprintf("%s.%s", dataID, timestamp)
+	// IMPORTANT:
+	// MercadoPago expects EXACT format:
+	// id:[data.id];request-id:[x-request-id];ts:[ts];
+	manifest := fmt.Sprintf(
+		"id:%s;request-id:%s;ts:%s;",
+		dataID,
+		xRequestID,
+		ts,
+	)
 
-	// Crear el HMAC-SHA256 usando el access token como clave
-	h := sha256.New()
-	h.Write([]byte(verifyString))
-	hashedBytes := h.Sum(nil)
-	computedSignature := fmt.Sprintf("%x", hashedBytes)
+	log.Printf(
+		"[WebhookValidator.ValidateSignature] DEBUG: manifest=%s",
+		manifest,
+	)
 
-	// La firma en el header ya es el hash hexadecimal
-	// Comparar de forma segura
-	isValid := constantTimeCompare(computedSignature, signature)
-	if !isValid {
-		log.Printf("[WebhookValidator.ValidateSignature] WARNING: Signature mismatch - computed=%s, received=%s", computedSignature, signature)
-	} else {
-		log.Printf("[WebhookValidator.ValidateSignature] INFO: Signature validated successfully")
+	// Generate HMAC SHA256
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(manifest))
+
+	expectedSignatureBytes := mac.Sum(nil)
+
+	// Decode MercadoPago signature from hex
+	receivedSignatureBytes, err := hex.DecodeString(receivedSignatureHex)
+	if err != nil {
+		log.Printf(
+			"[WebhookValidator.ValidateSignature] ERROR: invalid signature hex: %v",
+			err,
+		)
+		return false
 	}
-	return isValid
-}
 
-// constantTimeCompare compara dos strings en tiempo constante para evitar timing attacks
-func constantTimeCompare(a, b string) bool {
-	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+	// Constant-time comparison
+	isValid := hmac.Equal(expectedSignatureBytes, receivedSignatureBytes)
+
+	if !isValid {
+		log.Printf(
+			"[WebhookValidator.ValidateSignature] WARNING: signature mismatch expected=%s received=%s",
+			hex.EncodeToString(expectedSignatureBytes),
+			receivedSignatureHex,
+		)
+		return false
+	}
+
+	log.Printf(
+		"[WebhookValidator.ValidateSignature] INFO: signature validated successfully",
+	)
+
+	return true
 }

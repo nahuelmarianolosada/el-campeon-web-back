@@ -278,15 +278,17 @@ func (h *PaymentHandler) MercadopagoWebhook(c *gin.Context) {
 		return
 	}
 
-	// Obtener el header de firma
+	// Obtener el header de firma y el header de request id
 	xSignature := c.GetHeader("X-Signature")
+	xRequestId := c.GetHeader("X-Request-Id")
+
 	if xSignature == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Signature header"})
 		return
 	}
 
 	// Procesar el webhook
-	if err := h.paymentService.ProcessMercadopagoWebhook(ctx, &webhook, xSignature); err != nil {
+	if err := h.paymentService.ProcessMercadopagoWebhook(ctx, &webhook, xSignature, xRequestId); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

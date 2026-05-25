@@ -32,10 +32,9 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	guestRepo := repositories.NewGuestRepository(db)
 
 	// Inicializar servicio de email
-	emailService, err := email.NewMailgunService(cfg)
+	emailService, err := email.NewEmailService(cfg)
 	if err != nil {
 		log.Printf("[SetupRoutes] WARNING: Failed to initialize email service: %v", err)
-		emailService = &noOpEmailService{}
 	}
 
 	// Inicializar servicios
@@ -217,17 +216,4 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 			"service": "el-campeon-web",
 		})
 	})
-}
-
-// noOpEmailService es una implementación no-op cuando email no está configurado
-type noOpEmailService struct{}
-
-func (s *noOpEmailService) SendVerificationCode(toEmail, code string) error {
-	log.Printf("[noOpEmailService] Skipping email send (not configured) - email=%s", toEmail)
-	return nil
-}
-
-func (s *noOpEmailService) SendOrderConfirmation(toEmail, orderNumber string, total float64) error {
-	log.Printf("[noOpEmailService] Skipping email send (not configured) - email=%s, order=%s", toEmail, orderNumber)
-	return nil
 }
