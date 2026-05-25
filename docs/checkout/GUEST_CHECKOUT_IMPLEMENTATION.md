@@ -37,7 +37,7 @@ VerifyEmailAndSendCode(email, clientIP) error
   └─ Generate 6-digit code
   └─ Hash with bcrypt
   └─ Create GuestSession
-  └─ Send email via Mailgun
+  └─ Send email via SMTP (Gomail)
   └─ Return 200 OK
 
 ConfirmEmailAndCreateSession(email, code, clientIP) (*GuestSessionResponse, error)
@@ -89,7 +89,7 @@ CreateGuestPayment(ctx, req *CreateGuestPaymentRequest) (*PaymentResponse, error
 - Returns HTTP 429 if exceeded
 
 #### Email Verification
-- 6-digit code sent via Mailgun
+- 6-digit code sent via SMTP (Gomail)
 - Valid for 10 minutes
 - Hashed with bcrypt in DB
 - Max 3 confirmation attempts
@@ -296,10 +296,14 @@ ALTER TABLE orders ADD COLUMN guest_email VARCHAR(255) NULL;
 
 Add to .env:
 ```env
-MAILGUN_DOMAIN=sandbox-your-domain.mailgun.org
-MAILGUN_API_KEY=key-your-api-key
-MAILGUN_FROM_EMAIL=noreply@elcampeon.com
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=your-user
+SMTP_PASSWORD=your-password
+SMTP_FROM_EMAIL=noreply@elcampeon.com
 ```
+
+See the [SMTP Configuration Tutorial](../basic/SMTP_CONFIG_TUTORIAL.md) for detailed instructions on how to configure these values for Gmail, Outlook, and other providers.
 
 ### 9. Testing Endpoints
 
@@ -344,14 +348,13 @@ curl -X POST http://localhost:8080/api/payments/guest \
 - `migrations/005_guest_checkout_support.sql`
 - `internal/models/guest.go`
 - `internal/repositories/guest_repository.go`
-- `internal/services/email/mailgun_service.go`
-- `internal/services/email/context.go`
+- `internal/services/email/email_service.go`
 - `internal/services/guest/guest_service.go`
 - `internal/handlers/guest_handler.go`
 - `internal/middleware/guest.go`
 
 ### Modified
-- `internal/config/config.go` - Added Mailgun config
+- `internal/config/config.go` - Added SMTP config
 - `internal/models/user.go` - Added is_anonymous, email_verified
 - `internal/models/order.go` - UserID nullable, added guest_email
 - `internal/utils/jwt.go` - Added GenerateGuestToken, ValidateGuestToken
@@ -367,5 +370,5 @@ curl -X POST http://localhost:8080/api/payments/guest \
 - Verification codes expire after 10 minutes
 - Guest users are permanently stored (no auto-cleanup scheduled)
 - MercadoPago webhook works transparently for guest and authenticated users
-- EmailService has fallback no-op implementation when Mailgun not configured
+- EmailService has fallback no-op implementation when SMTP not configured
 

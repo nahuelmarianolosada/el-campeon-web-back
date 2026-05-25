@@ -138,6 +138,7 @@ go run ./cmd/main.go
 - **[DATABASE.md](docs/basic/DATABASE.md)** - Esquema de base de datos y relaciones
 - **[API.md](docs/basic/API.md)** - Especificación completa de endpoints REST
 - **[SETUP.md](docs/basic/SETUP.md)** - Guía paso a paso de instalación
+- **[SMTP_CONFIG_TUTORIAL.md](docs/basic/SMTP_CONFIG_TUTORIAL.md)** - Tutorial de configuración de email SMTP
 
 ## 🧪 Testing
 

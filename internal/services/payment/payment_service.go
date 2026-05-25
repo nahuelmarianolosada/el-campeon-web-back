@@ -25,7 +25,7 @@ type PaymentService interface {
 	GetPaymentsByUserID(userID uint, limit, offset int) ([]models.PaymentResponse, error)
 	GetPaymentByOrderID(orderID uint) (*models.PaymentResponse, error)
 	UpdatePaymentStatus(paymentID uint, status string) (*models.PaymentResponse, error)
-	ProcessMercadopagoWebhook(ctx context.Context, webhook *models.MercadopagoWebhookRequest, xSignature string) error
+	ProcessMercadopagoWebhook(ctx context.Context, webhook *models.MercadopagoWebhookRequest, xSignature string, xRequestId string) error
 	ListAllPayments(limit, offset int) ([]models.PaymentResponse, error)
 }
 
@@ -434,8 +434,8 @@ func (s *paymentService) UpdatePaymentStatus(paymentID uint, status string) (*mo
 // ProcessMercadopagoWebhook procesa webhooks de MercadoPago
 // Realiza validación de firma, obtiene detalles del pago desde MP API
 // y actualiza los estados de pago y orden
-func (s *paymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook *models.MercadopagoWebhookRequest, xSignature string) error {
-	log.Printf("[paymentService.ProcessMercadopagoWebhook] INFO: Processing webhook - webhookType=%s, webhookDataID=%s", webhook.Type, webhook.Data.ID)
+func (s *paymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook *models.MercadopagoWebhookRequest, xSignature string, xRequestId string) error {
+	log.Printf("[paymentService.ProcessMercadopagoWebhook] INFO: Processing webhook - webhookType=%s, webhookDataID=%s, xRequestId=%s", webhook.Type, webhook.Data.ID, xRequestId)
 
 	// 1. Validar que sea un webhook de pago
 	if webhook.Type != "payment" {
@@ -444,8 +444,8 @@ func (s *paymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook 
 	}
 
 	// 2. Validar la firma del webhook
-	if !s.webhookValidator.ValidateSignature(xSignature, webhook.Type, webhook.Data.ID, s.config.MercadopagoAccessToken) {
-		log.Printf("[paymentService.ProcessMercadopagoWebhook] ERROR: Invalid webhook signature - webhookDataID=%s", webhook.Data.ID)
+	if !s.webhookValidator.ValidateSignature(xSignature, webhook.Data.ID, xRequestId, s.config.MercadopagoWebhookSecret) {
+		log.Printf("[paymentService.ProcessMercadopagoWebhook] ERROR: Invalid webhook signature - webhookDataID=%s, xRequestId=%s", webhook.Data.ID, xRequestId)
 		return fmt.Errorf("invalid webhook signature")
 	}
 	log.Printf("[paymentService.ProcessMercadopagoWebhook] INFO: Webhook signature validated - webhookDataID=%s", webhook.Data.ID)
