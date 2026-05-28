@@ -1,0 +1,10 @@
+.git
+.github
+.idea
+docs
+*.md
+.env
+.env.*
+API_EXAMPLES.sh
+docker-compose*.yml
+Makefile

@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.22-alpine AS builder
 
 WORKDIR /app
 
@@ -12,8 +12,8 @@ RUN go mod download
 # Copiar código fuente
 COPY . .
 
-# Compilar la aplicación
-RUN go build -o main ./cmd/main.go
+# Compilar la aplicación (binario estático para alpine)
+RUN CGO_ENABLED=0 GOOS=linux go build -o main ./cmd/main.go
 
 # Final stage
 FROM alpine:latest

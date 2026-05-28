@@ -1,5 +1,8 @@
-version: '3.3'
-
+# Compose de producción para la instancia EC2.
+# Las imágenes se construyen en GitHub Actions y se publican en GHCR;
+# la instancia solo hace `pull` (nunca compila -> sin riesgo de OOM).
+#
+# Requiere un archivo .env en el mismo directorio (NO se commitea).
 services:
   db:
     image: mysql:8.0
@@ -23,30 +26,32 @@ services:
       interval: 10s
     restart: unless-stopped
 
-  app:
-    build:
-      context: .
-      dockerfile: dockerfiles/Dockerfile
-    container_name: el_campeon_app
+  back:
+    image: ghcr.io/nahuelmarianolosada/el-campeon-web-back:latest
+    container_name: el_campeon_back
+    env_file: .env
     environment:
-      PORT: ${PORT}
-      ENV: ${ENV}
-      DB_HOST: db  # Expert Tip: Use the service name 'db' as the host
+      DB_HOST: db        # nombre del servicio en la red de docker
       DB_PORT: 3306
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
-      JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS}
-      MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN}
-      MERCADOPAGO_PUBLIC_KEY: ${MERCADOPAGO_PUBLIC_KEY}
-      API_BASE_URL: ${API_BASE_URL}
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    networks:
+      - el_campeon_network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  front:
+    image: ghcr.io/nahuelmarianolosada/el-campeon-web-front:latest
+    container_name: el_campeon_front
+    ports:
+      - "127.0.0.1:3000:3000"
     networks:
       - el_campeon_network
     restart: unless-stopped
