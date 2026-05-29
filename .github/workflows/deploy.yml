@@ -11,6 +11,7 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/nahuelmarianolosada/el-campeon-web-back
+  EC2_SG_ID: sg-05cd98748396b25e3
 
 jobs:
   build:
@@ -60,6 +61,16 @@ jobs:
           aws ec2 start-instances --instance-ids ${{ secrets.EC2_INSTANCE_ID }}
           aws ec2 wait instance-running --instance-ids ${{ secrets.EC2_INSTANCE_ID }}
 
+      - name: Open SSH for this runner
+        id: ssh_open
+        run: |
+          RUNNER_IP=$(curl -s https://checkip.amazonaws.com)
+          echo "cidr=${RUNNER_IP}/32" >> "$GITHUB_OUTPUT"
+          aws ec2 authorize-security-group-ingress \
+            --group-id "$EC2_SG_ID" \
+            --protocol tcp --port 22 --cidr "${RUNNER_IP}/32" 2>/dev/null \
+            || echo "rule already present, continuing"
+
       - name: Wait for SSH to be ready
         run: |
           for i in $(seq 1 40); do
@@ -82,3 +93,11 @@ jobs:
             docker compose -f docker-compose.prod.yml pull back
             docker compose -f docker-compose.prod.yml up -d back
             docker image prune -f
+
+      - name: Close SSH for this runner
+        if: always() && steps.ssh_open.outputs.cidr != ''
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "$EC2_SG_ID" \
+            --protocol tcp --port 22 --cidr "${{ steps.ssh_open.outputs.cidr }}" \
+            || echo "revoke failed (rule may already be gone)"
