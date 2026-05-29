@@ -223,7 +223,7 @@ CREATE TABLE IF NOT EXISTS payments (
 
 -- 1. Create guest_sessions table
 CREATE TABLE IF NOT EXISTS guest_sessions (
-                                              id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+                                              id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
                                               email VARCHAR(255) NOT NULL UNIQUE,
                                               verification_code_hash VARCHAR(255) NOT NULL,
                                               verification_code_sent_at TIMESTAMP NULL,
@@ -232,7 +232,7 @@ CREATE TABLE IF NOT EXISTS guest_sessions (
                                               verified_at TIMESTAMP NULL,
                                               guest_token_hash VARCHAR(255) NULL,
                                               session_ip_address VARCHAR(45) NULL,
-                                              user_id BIGINT UNSIGNED NULL UNIQUE,
+                                              user_id INT UNSIGNED NULL UNIQUE,
                                               attempts_from_ip INT DEFAULT 0,
                                               last_attempt_at TIMESTAMP NULL,
                                               expires_at TIMESTAMP NOT NULL DEFAULT (DATE_ADD(NOW(), INTERVAL 7 DAY)),
@@ -250,11 +250,11 @@ ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT FALSE AFTER is_anony
 ALTER TABLE users ADD COLUMN guest_session_id VARCHAR(36) NULL AFTER email_verified;
 
 -- 3. Modify orders table to support guest orders
-ALTER TABLE orders MODIFY COLUMN user_id BIGINT UNSIGNED NULL;
+ALTER TABLE orders MODIFY COLUMN user_id INT UNSIGNED NULL;
 ALTER TABLE orders ADD COLUMN guest_email VARCHAR(255) NULL AFTER user_id;
 ALTER TABLE orders ADD INDEX idx_guest_email (guest_email);
 
-#ALTER TABLE payments MODIFY COLUMN user_id BIGINT UNSIGNED NULL;
+#ALTER TABLE payments MODIFY COLUMN user_id INT UNSIGNED NULL;
 
 
 
