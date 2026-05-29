@@ -44,6 +44,7 @@ jobs:
 
   deploy:
     needs: build
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Configure AWS credentials
@@ -51,12 +52,20 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
 
       - name: Start EC2 instance if stopped
         run: |
           aws ec2 start-instances --instance-ids ${{ secrets.EC2_INSTANCE_ID }}
           aws ec2 wait instance-running --instance-ids ${{ secrets.EC2_INSTANCE_ID }}
+
+      - name: Wait for SSH to be ready
+        run: |
+          for i in $(seq 1 40); do
+            if nc -z -w5 ${{ secrets.EC2_HOST }} 22; then echo "SSH ready"; exit 0; fi
+            echo "waiting for SSH ($i)..."; sleep 5
+          done
+          echo "SSH not reachable after timeout"; exit 1
 
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1
