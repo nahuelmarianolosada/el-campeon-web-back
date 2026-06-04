@@ -537,8 +537,9 @@ func TestProcessMercadopagoWebhook(t *testing.T) {
 	mpClient := new(MockMercadopagoClient)
 
 	cfg := &config.Config{
-		MercadopagoAccessToken: "test_token",
-		MercadopagoPublicKey:   "test_public_key",
+		MercadopagoAccessToken:   "test_token",
+		MercadopagoPublicKey:     "test_public_key",
+		MercadopagoWebhookSecret: "test_webhook_secret",
 	}
 
 	service := NewPaymentServiceWithClient(paymentRepo, orderRepo, cfg, mpClient)
