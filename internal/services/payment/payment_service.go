@@ -444,11 +444,16 @@ func (s *paymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook 
 	}
 
 	// 2. Validar la firma del webhook
-	if !s.webhookValidator.ValidateSignature(xSignature, webhook.Data.ID, xRequestId, s.config.MercadopagoWebhookSecret) {
+	// En entornos no productivos, si el secret no está configurado, se omite la validación
+	// para permitir reproducir webhooks capturados localmente.
+	if s.config.MercadopagoWebhookSecret == "" && s.config.ServerEnv != "production" {
+		log.Printf("[paymentService.ProcessMercadopagoWebhook] WARNING: MERCADOPAGO_WEBHOOK_SECRET is empty and ServerEnv=%s — skipping signature validation", s.config.ServerEnv)
+	} else if !s.webhookValidator.ValidateSignature(xSignature, webhook.Data.ID, xRequestId, s.config.MercadopagoWebhookSecret) {
 		log.Printf("[paymentService.ProcessMercadopagoWebhook] ERROR: Invalid webhook signature - webhookDataID=%s, xRequestId=%s", webhook.Data.ID, xRequestId)
 		return fmt.Errorf("invalid webhook signature")
+	} else {
+		log.Printf("[paymentService.ProcessMercadopagoWebhook] INFO: Webhook signature validated - webhookDataID=%s", webhook.Data.ID)
 	}
-	log.Printf("[paymentService.ProcessMercadopagoWebhook] INFO: Webhook signature validated - webhookDataID=%s", webhook.Data.ID)
 
 	// 2.5. Inicializar cliente si no existe
 	if s.mercadopagoClient == nil {
