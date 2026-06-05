@@ -65,18 +65,25 @@ SKU-EXISTING,Updated Product,Cat2,200,150,20,img3.jpg
 
 func TestImportProducts_XLSX(t *testing.T) {
 	f := excelize.NewFile()
+	t.Cleanup(func() { _ = f.Close() })
 	sheet := "Sheet1"
-	f.SetSheetName("Sheet1", sheet)
-	f.SetCellValue(sheet, "A1", "sku")
-	f.SetCellValue(sheet, "B1", "nombre")
-	f.SetCellValue(sheet, "C1", "categoria")
-	f.SetCellValue(sheet, "D1", "precio_minorista")
-	f.SetCellValue(sheet, "E1", "precio_mayorista")
-	f.SetCellValue(sheet, "A2", "XLSX-SKU")
-	f.SetCellValue(sheet, "B2", "XLSX Product")
-	f.SetCellValue(sheet, "C2", "CatX")
-	f.SetCellValue(sheet, "D2", 500)
-	f.SetCellValue(sheet, "E2", 400)
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(f.SetSheetName("Sheet1", sheet))
+	must(f.SetCellValue(sheet, "A1", "sku"))
+	must(f.SetCellValue(sheet, "B1", "nombre"))
+	must(f.SetCellValue(sheet, "C1", "categoria"))
+	must(f.SetCellValue(sheet, "D1", "precio_minorista"))
+	must(f.SetCellValue(sheet, "E1", "precio_mayorista"))
+	must(f.SetCellValue(sheet, "A2", "XLSX-SKU"))
+	must(f.SetCellValue(sheet, "B2", "XLSX Product"))
+	must(f.SetCellValue(sheet, "C2", "CatX"))
+	must(f.SetCellValue(sheet, "D2", 500))
+	must(f.SetCellValue(sheet, "E2", 400))
 
 	var buf bytes.Buffer
 	if err := f.Write(&buf); err != nil {
