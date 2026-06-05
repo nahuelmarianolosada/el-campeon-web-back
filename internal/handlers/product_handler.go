@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
@@ -185,6 +186,52 @@ func (h *ProductHandler) ListProducts(c *gin.Context) {
 		"limit":  limit,
 		"offset": offset,
 	})
+}
+
+// ImportProducts importa productos desde un archivo .xlsx o .csv (solo ADMIN).
+// Recibe el archivo en el campo multipart "file" y un flag "dry_run" (string "true"/"false",
+// default "true") que controla si se aplica o sólo se previsualiza.
+// @Summary Importar productos desde Excel/CSV
+// @Tags Productos
+// @Security Bearer
+// @Accept multipart/form-data
+// @Produce json
+// @Param file formData file true "Archivo .xlsx o .csv"
+// @Param dry_run formData string false "true para previsualizar sin aplicar (default true)"
+// @Success 200 {object} product.ImportResult
+// @Failure 400 {object} gin.H
+// @Router /api/products/import [post]
+func (h *ProductHandler) ImportProducts(c *gin.Context) {
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "archivo requerido en el campo 'file'"})
+		return
+	}
+
+	dryRun := true
+	if v := strings.TrimSpace(strings.ToLower(c.PostForm("dry_run"))); v != "" {
+		dryRun = v != "false" && v != "0"
+	}
+
+	const maxSize = 10 << 20 // 10 MiB
+	if fileHeader.Size > maxSize {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "archivo demasiado grande (máximo 10 MB)"})
+		return
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no se pudo abrir el archivo"})
+		return
+	}
+	defer file.Close()
+
+	result, err := h.productService.ImportProducts(file, fileHeader.Filename, dryRun)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 // ListProductsByCategory lista productos por categoría

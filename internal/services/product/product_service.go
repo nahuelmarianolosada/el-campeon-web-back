@@ -2,6 +2,7 @@ package product
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"strings"
 
@@ -19,6 +20,7 @@ type ProductService interface {
 	ListProductsByCategory(category string, limit, offset int) ([]models.ProductResponse, error)
 	ListActiveProducts(limit, offset int) ([]models.ProductResponse, error)
 	GetPrice(productID uint, isBulkBuyer bool, quantity int) (float64, error)
+	ImportProducts(file io.Reader, fileName string, dryRun bool) (*ImportResult, error)
 }
 
 type productService struct {
