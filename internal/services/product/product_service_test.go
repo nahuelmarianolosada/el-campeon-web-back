@@ -1,6 +1,8 @@
 package product
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
@@ -33,8 +35,11 @@ func (m *MockProductRepository) FindByID(id uint) (*models.Product, error) {
 }
 
 func (m *MockProductRepository) FindBySKU(sku string) (*models.Product, error) {
+	if sku == "SKU-ERR" {
+		return nil, errors.New("error consultando SKU")
+	}
 	for _, product := range m.products {
-		if product.SKU == sku {
+		if strings.EqualFold(product.SKU, sku) {
 			return product, nil
 		}
 	}

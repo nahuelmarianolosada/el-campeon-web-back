@@ -157,6 +157,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 		productAdmin := admin.Group("/api/products")
 		{
 			productAdmin.POST("", productHandler.CreateProduct)
+			productAdmin.POST("/import", productHandler.ImportProducts)
 			productAdmin.PUT("/:id", productHandler.UpdateProduct)
 			productAdmin.DELETE("/:id", productHandler.DeleteProduct)
 			productAdmin.POST("/:id/variants", variantHandler.CreateProductVariant)
