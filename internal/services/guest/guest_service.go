@@ -14,7 +14,6 @@ import (
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/repositories"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/email"
-	internalErr "github.com/nahuelmarianolosada/el-campeon-web/internal/services/errors"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/utils"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -105,13 +104,10 @@ func (s *guestService) VerifyEmailAndSendCode(emailAddr, clientIP string) error 
 		return nil
 	}
 
-	// Sesión existe, actualizar y reenviar código
-	if session.IsVerified {
-		log.Printf("[guestService.VerifyEmailAndSendCode] WARNING: Email already verified - email=%s", emailAddr)
-		return internalErr.ErrEmailAlreadyVerified
-	}
-
-	// Generar nuevo código
+	// Sesión existe: re-verificación. El guest pidió un código nuevo, probablemente
+	// porque perdió el token (otro device, incógnito, expiró del lado del cliente).
+	// Invalidamos la verificación anterior y emitimos un código nuevo; la sesión solo
+	// vuelve a quedar "verified" cuando confirme.
 	code := s.generateVerificationCode()
 	codeHash, err := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
 	if err != nil {
@@ -126,6 +122,10 @@ func (s *guestService) VerifyEmailAndSendCode(emailAddr, clientIP string) error 
 	session.SessionIPAddress = clientIP
 	session.AttemptsFromIP = attempts + 1
 	session.LastAttemptAt = &now
+	session.IsVerified = false
+	session.VerifiedAt = nil
+	session.GuestTokenHash = ""
+	session.ExpiresAt = now.AddDate(0, 0, 7)
 
 	if err := s.guestRepo.UpdateGuestSession(session); err != nil {
 		log.Printf("[guestService.VerifyEmailAndSendCode] ERROR: Failed to update session: %v", err)

@@ -16,5 +16,4 @@ var (
 	ErrInvalidRole          = errors.New("invalid role: must be USER or ADMIN")
 	ErrPasswordTooShort     = errors.New("password must be at least 8 characters")
 	ErrEmailInvalid         = errors.New("invalid email format")
-	ErrEmailAlreadyVerified = errors.New("email is already verified")
 )
