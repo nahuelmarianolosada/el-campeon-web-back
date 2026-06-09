@@ -15,6 +15,7 @@ import (
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/product"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/product/variant"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/report"
+	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/shipping"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/user"
 	"gorm.io/gorm"
 )
@@ -30,6 +31,9 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	reportRepo := repositories.NewReportRepository(db)
 	variantRepo := repositories.NewProductVariantRepository(db)
 	guestRepo := repositories.NewGuestRepository(db)
+	branchRepo := repositories.NewBranchRepository(db)
+	shippingRepo := repositories.NewShippingRepository(db)
+	stockRepo := repositories.NewProductBranchStockRepository(db)
 
 	// Inicializar servicio de email
 	emailService, err := email.NewEmailService(cfg)
@@ -45,7 +49,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	reportService := report.NewReportService(reportRepo)
 	variantService := variant.NewProductVariantService(variantRepo, productRepo)
 	guestService := guest.NewGuestService(guestRepo, userRepo, emailService, cfg)
-	orderService := order.NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
+	shippingService := shipping.NewShippingService(branchRepo, shippingRepo, stockRepo)
+	orderService := order.NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, stockRepo)
 
 	// Inicializar handlers
 	authHandler := NewAuthHandler(userService)
@@ -56,6 +61,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	reportHandler := NewReportHandler(reportService)
 	variantHandler := NewProductVariantHandler(variantService)
 	guestHandler := NewGuestHandler(guestService)
+	shippingHandler := NewShippingHandler(shippingService)
 
 	// Auth routes (sin autenticación)
 	authGroup := router.Group("/auth")
@@ -95,6 +101,13 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 	{
 		variantSingleRoutes.GET("/:variantId", variantHandler.GetVariant)
 	}
+
+	// Public shipping routes (cotización + listado de sucursales para checkout)
+	shippingPublic := router.Group("/api/shipping")
+	{
+		shippingPublic.POST("/quote", shippingHandler.Quote)
+	}
+	router.GET("/api/branches", shippingHandler.ListBranches)
 
 	// Guest order/payment routes (requieren sesión guest validada)
 	publicOrderGroup := router.Group("/api/orders")
@@ -201,6 +214,46 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 			reportAdmin.GET("/orders", reportHandler.GetOrdersReport)
 			reportAdmin.GET("/low-stock", reportHandler.GetLowStockProductsReport)
 			reportAdmin.GET("/revenue", reportHandler.GetDailyRevenueReport)
+		}
+
+		// Shipping admin routes: sucursales, zonas, tarifas, CPs y stock por sucursal
+		branchAdmin := admin.Group("/api/admin/branches")
+		{
+			branchAdmin.GET("", shippingHandler.ListBranches)
+			branchAdmin.GET("/:id", shippingHandler.GetBranch)
+			branchAdmin.POST("", shippingHandler.CreateBranch)
+			branchAdmin.PUT("/:id", shippingHandler.UpdateBranch)
+			branchAdmin.DELETE("/:id", shippingHandler.DeleteBranch)
+		}
+
+		zoneAdmin := admin.Group("/api/admin/delivery-zones")
+		{
+			zoneAdmin.GET("", shippingHandler.ListZones)
+			zoneAdmin.POST("", shippingHandler.CreateZone)
+			zoneAdmin.PUT("/:id", shippingHandler.UpdateZone)
+			zoneAdmin.DELETE("/:id", shippingHandler.DeleteZone)
+		}
+
+		rateAdmin := admin.Group("/api/admin/delivery-rates")
+		{
+			rateAdmin.GET("", shippingHandler.ListRates)
+			rateAdmin.POST("", shippingHandler.CreateRate)
+			rateAdmin.PUT("/:id", shippingHandler.UpdateRate)
+			rateAdmin.DELETE("/:id", shippingHandler.DeleteRate)
+		}
+
+		pcAdmin := admin.Group("/api/admin/postal-codes")
+		{
+			pcAdmin.GET("", shippingHandler.ListPostalCodes)
+			pcAdmin.POST("", shippingHandler.UpsertPostalCode)
+			pcAdmin.POST("/bulk", shippingHandler.BulkUpsertPostalCodes)
+			pcAdmin.DELETE("/:postal_code", shippingHandler.DeletePostalCode)
+		}
+
+		productStockAdmin := admin.Group("/api/admin/products")
+		{
+			productStockAdmin.GET("/:id/stock", shippingHandler.GetProductStock)
+			productStockAdmin.PUT("/:id/stock", shippingHandler.SetProductStock)
 		}
 	}
 

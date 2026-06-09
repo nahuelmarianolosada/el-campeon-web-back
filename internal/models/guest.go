@@ -42,7 +42,10 @@ type CreateGuestOrderRequest struct {
 	UserID          uint                   `json:"user_id,omitempty"`
 	Items           []GuestCartItem        `json:"items" binding:"required,min=1"`
 	ShippingAddress map[string]interface{} `json:"shipping_address" binding:"required"`
-	DeliveryMethod  string                 `json:"delivery_method" binding:"required,oneof=shipping pickup-libreria pickup-jugueteria"`
+	DeliveryMethod  string                 `json:"delivery_method" binding:"required,oneof=shipping pickup pickup-libreria pickup-jugueteria"`
+	OriginBranchID  *uint                  `json:"origin_branch_id"`
+	DeliveryZoneID  *uint                  `json:"delivery_zone_id"`
+	ShippingCost    float64                `json:"shipping_cost" binding:"gte=0"`
 	Notes           string                 `json:"notes"`
 }
 type CreateGuestPaymentRequest struct {
