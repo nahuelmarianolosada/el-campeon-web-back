@@ -1,12 +1,10 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
-	internalErr "github.com/nahuelmarianolosada/el-campeon-web/internal/services/errors"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/guest"
 )
 
@@ -43,12 +41,6 @@ func (h *GuestHandler) VerifyEmail(c *gin.Context) {
 		// Revisar si es error de rate limit
 		if err.Error() == "too many verification attempts from this IP. Try again in 15 minutes" {
 			c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
-			return
-		}
-		if errors.Is(err, internalErr.ErrEmailAlreadyVerified) {
-			c.JSON(http.StatusAccepted, gin.H{
-				"message": "Email already verified",
-			})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
