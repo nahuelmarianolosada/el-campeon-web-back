@@ -18,8 +18,11 @@ type Order struct {
 	Subtotal        float64           `gorm:"not null" json:"subtotal"`
 	Tax             float64           `gorm:"not null;default:0" json:"tax"`
 	Total           float64           `gorm:"not null" json:"total"`
+	ShippingCost    float64           `gorm:"type:decimal(12,2);not null;default:0" json:"shipping_cost"`
 	ShippingAddress datatypes.JSONMap `gorm:"type:JSON" json:"shipping_address"`
-	DeliveryMethod  string            `gorm:"type:ENUM('shipping','pickup-libreria','pickup-jugueteria');default:'shipping'" json:"delivery_method"`
+	DeliveryMethod  string            `gorm:"type:ENUM('shipping','pickup','pickup-libreria','pickup-jugueteria');default:'shipping'" json:"delivery_method"`
+	OriginBranchID  *uint             `gorm:"index" json:"origin_branch_id,omitempty"`
+	DeliveryZoneID  *uint             `gorm:"index" json:"delivery_zone_id,omitempty"`
 	Notes           string            `gorm:"type:text" json:"notes"`
 	CreatedAt       time.Time         `json:"created_at"`
 	UpdatedAt       time.Time         `json:"updated_at"`
@@ -38,7 +41,10 @@ type OrderItem struct {
 
 type CreateOrderRequest struct {
 	ShippingAddress map[string]interface{} `json:"shipping_address" binding:"required"`
-	DeliveryMethod  string                 `json:"delivery_method" binding:"required,oneof=shipping pickup-libreria pickup-jugueteria"`
+	DeliveryMethod  string                 `json:"delivery_method" binding:"required,oneof=shipping pickup pickup-libreria pickup-jugueteria"`
+	OriginBranchID  *uint                  `json:"origin_branch_id"`
+	DeliveryZoneID  *uint                  `json:"delivery_zone_id"`
+	ShippingCost    float64                `json:"shipping_cost" binding:"gte=0"`
 	Notes           string                 `json:"notes"`
 }
 
@@ -52,8 +58,11 @@ type OrderResponse struct {
 	Subtotal        float64                `json:"subtotal"`
 	Tax             float64                `json:"tax"`
 	Total           float64                `json:"total"`
+	ShippingCost    float64                `json:"shipping_cost"`
 	ShippingAddress map[string]interface{} `json:"shipping_address"`
 	DeliveryMethod  string                 `json:"delivery_method"`
+	OriginBranchID  *uint                  `json:"origin_branch_id,omitempty"`
+	DeliveryZoneID  *uint                  `json:"delivery_zone_id,omitempty"`
 	Notes           string                 `json:"notes"`
 	CreatedAt       time.Time              `json:"created_at"`
 	UpdatedAt       time.Time              `json:"updated_at"`

@@ -26,6 +26,8 @@ help:
 	@echo "  $(YELLOW)make clean$(NC)           - Limpiar binarios y temporales"
 	@echo "  $(YELLOW)make docker-build$(NC)    - Construir imagen Docker"
 	@echo "  $(YELLOW)make db-init$(NC)         - Inicializar base de datos"
+	@echo "  $(YELLOW)make db-migrate$(NC)      - Aplicar migraciones numeradas (idempotentes)"
+	@echo "  $(YELLOW)make db-migrate-prod$(NC) - Aplicar migraciones en docker-compose.prod.yml"
 	@echo "  $(YELLOW)make logs$(NC)            - Ver logs de Docker"
 
 ## Build y Run
@@ -90,6 +92,30 @@ db-init:
 	@echo "$(GREEN)Inicializando base de datos...$(NC)"
 	@$(DOCKER_COMPOSE) exec db mysql -u root -proot_password_change_me < migrations/init.sql
 	@echo "$(GREEN)✓ Base de datos inicializada$(NC)"
+
+# Aplica todas las migraciones numeradas (00X_*.sql) en orden, sobre la DB local
+# del docker-compose. Es idempotente: las migraciones son seguras para re-ejecutar.
+# Usa DB_NAME / DB_USER / DB_PASSWORD del .env (o sus valores por defecto del compose).
+db-migrate:
+	@echo "$(GREEN)Aplicando migraciones numeradas...$(NC)"
+	@for f in $$(ls migrations/[0-9]*.sql | sort); do \
+		echo "$(YELLOW)→ $$f$(NC)"; \
+		$(DOCKER_COMPOSE) exec -T db sh -c 'mysql -u root -p"$$MYSQL_ROOT_PASSWORD" "$$MYSQL_DATABASE"' < $$f \
+			|| { echo "$(RED)✗ Falló $$f$(NC)"; exit 1; }; \
+	done
+	@echo "$(GREEN)✓ Migraciones aplicadas$(NC)"
+
+# Variante para aplicar migraciones en una instancia productiva (EC2).
+# Uso: make db-migrate-prod COMPOSE_FILE=docker-compose.prod.yml
+db-migrate-prod:
+	@echo "$(GREEN)Aplicando migraciones en producción...$(NC)"
+	@for f in $$(ls migrations/[0-9]*.sql | sort); do \
+		echo "$(YELLOW)→ $$f$(NC)"; \
+		docker compose -f $${COMPOSE_FILE:-docker-compose.prod.yml} exec -T db \
+			sh -c 'mysql -u root -p"$$MYSQL_ROOT_PASSWORD" "$$MYSQL_DATABASE"' < $$f \
+			|| { echo "$(RED)✗ Falló $$f$(NC)"; exit 1; }; \
+	done
+	@echo "$(GREEN)✓ Migraciones aplicadas en producción$(NC)"
 
 db-shell:
 	@$(DOCKER_COMPOSE) exec db mysql -u el_campeon_user -puser_password_change_me el_campeon_web

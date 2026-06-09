@@ -28,6 +28,7 @@ type orderService struct {
 	productRepo repositories.ProductRepository
 	variantRepo repositories.ProductVariantRepository
 	guestRepo   repositories.GuestRepository
+	stockRepo   repositories.ProductBranchStockRepository
 }
 
 func NewOrderService(
@@ -38,6 +39,7 @@ func NewOrderService(
 	productRepo repositories.ProductRepository,
 	variantRepo repositories.ProductVariantRepository,
 	guestRepo repositories.GuestRepository,
+	stockRepo repositories.ProductBranchStockRepository,
 ) OrderService {
 	return &orderService{
 		orderRepo:   orderRepo,
@@ -47,6 +49,7 @@ func NewOrderService(
 		productRepo: productRepo,
 		variantRepo: variantRepo,
 		guestRepo:   guestRepo,
+		stockRepo:   stockRepo,
 	}
 }
 
@@ -83,6 +86,9 @@ func (s *orderService) CreateOrder(userID uint, req *models.CreateOrderRequest) 
 		shippingData[k] = v
 	}
 
+	// Total incluye el costo de envío que el front cotizó previamente (snapshot).
+	total += req.ShippingCost
+
 	// Crear orden
 	orderNumber := s.generateOrderNumber()
 	order := &models.Order{
@@ -92,8 +98,11 @@ func (s *orderService) CreateOrder(userID uint, req *models.CreateOrderRequest) 
 		Subtotal:        subtotal,
 		Tax:             tax,
 		Total:           total,
+		ShippingCost:    req.ShippingCost,
 		ShippingAddress: shippingData,
 		DeliveryMethod:  req.DeliveryMethod,
+		OriginBranchID:  req.OriginBranchID,
+		DeliveryZoneID:  req.DeliveryZoneID,
 		Notes:           req.Notes,
 	}
 
@@ -118,6 +127,15 @@ func (s *orderService) CreateOrder(userID uint, req *models.CreateOrderRequest) 
 		}
 	}
 	log.Printf("[orderService.CreateOrder] INFO: All items added to order - orderID=%d, itemCount=%d", order.ID, len(cart.Items))
+
+	// Reservar stock en la sucursal origen si se especificó.
+	if order.OriginBranchID != nil && s.stockRepo != nil {
+		for _, item := range cart.Items {
+			if err := s.stockRepo.IncrementReserved(nil, item.ProductID, *order.OriginBranchID, item.Quantity); err != nil {
+				log.Printf("[orderService.CreateOrder] WARN: Failed to reserve stock - productID=%d, branchID=%d, qty=%d: %v", item.ProductID, *order.OriginBranchID, item.Quantity, err)
+			}
+		}
+	}
 
 	// Limpiar el carrito
 	if err := s.cartRepo.ClearCart(userID); err != nil {
@@ -221,8 +239,11 @@ func (s *orderService) getOrderResponse(order *models.Order) *models.OrderRespon
 		Subtotal:        order.Subtotal,
 		Tax:             order.Tax,
 		Total:           order.Total,
+		ShippingCost:    order.ShippingCost,
 		ShippingAddress: order.ShippingAddress,
 		DeliveryMethod:  order.DeliveryMethod,
+		OriginBranchID:  order.OriginBranchID,
+		DeliveryZoneID:  order.DeliveryZoneID,
 		Notes:           order.Notes,
 		CreatedAt:       order.CreatedAt,
 		UpdatedAt:       order.UpdatedAt,
@@ -313,9 +334,9 @@ func (s *orderService) CreateGuestOrder(req *models.CreateGuestOrderRequest) (*m
 		}
 	}
 
-	// Calcular tax y total
+	// Calcular tax y total (incluyendo costo de envío cotizado)
 	tax := subtotal * 0.21
-	total := subtotal + tax
+	total := subtotal + tax + req.ShippingCost
 
 	// Convertir map a JSON
 	shippingData := make(map[string]interface{})
@@ -332,8 +353,11 @@ func (s *orderService) CreateGuestOrder(req *models.CreateGuestOrderRequest) (*m
 		Subtotal:        subtotal,
 		Tax:             tax,
 		Total:           total,
+		ShippingCost:    req.ShippingCost,
 		ShippingAddress: shippingData,
 		DeliveryMethod:  req.DeliveryMethod,
+		OriginBranchID:  req.OriginBranchID,
+		DeliveryZoneID:  req.DeliveryZoneID,
 		Notes:           req.Notes,
 	}
 
@@ -361,6 +385,15 @@ func (s *orderService) CreateGuestOrder(req *models.CreateGuestOrderRequest) (*m
 	}
 
 	order.Items = resolvedItems
+
+	// Reservar stock en la sucursal origen (si aplica)
+	if order.OriginBranchID != nil && s.stockRepo != nil {
+		for _, item := range resolvedItems {
+			if err := s.stockRepo.IncrementReserved(nil, item.ProductID, *order.OriginBranchID, item.Quantity); err != nil {
+				log.Printf("[orderService.CreateGuestOrder] WARN: Failed to reserve stock - productID=%d, branchID=%d, qty=%d: %v", item.ProductID, *order.OriginBranchID, item.Quantity, err)
+			}
+		}
+	}
 
 	log.Printf("[orderService.CreateGuestOrder] INFO: Guest order created - orderID=%d", order.ID)
 	return s.getOrderResponse(order), nil

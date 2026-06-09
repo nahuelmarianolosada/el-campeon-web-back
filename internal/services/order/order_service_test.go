@@ -5,6 +5,7 @@ import (
 
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/models"
 	"github.com/nahuelmarianolosada/el-campeon-web/internal/services/order/status"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"gorm.io/gorm"
 )
@@ -410,6 +411,45 @@ func (m *MockGuestRepository) DeleteExpiredSessions() (int64, error) {
 	return 0, nil
 }
 
+type MockProductBranchStockRepository struct {
+	mock.Mock
+}
+
+func (m *MockProductBranchStockRepository) FindByProduct(productID uint) ([]models.ProductBranchStock, error) {
+	args := m.Called(productID)
+	return args.Get(0).([]models.ProductBranchStock), args.Error(1)
+}
+func (m *MockProductBranchStockRepository) GetByProductAndBranch(productID, branchID uint) (*models.ProductBranchStock, error) {
+	args := m.Called(productID, branchID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.ProductBranchStock), args.Error(1)
+}
+func (m *MockProductBranchStockRepository) Upsert(stock *models.ProductBranchStock) error {
+	args := m.Called(stock)
+	return args.Error(0)
+}
+func (m *MockProductBranchStockRepository) IncrementReserved(tx *gorm.DB, productID, branchID uint, delta int) error {
+	args := m.Called(tx, productID, branchID, delta)
+	return args.Error(0)
+}
+func (m *MockProductBranchStockRepository) DecrementStock(tx *gorm.DB, productID, branchID uint, qty int) error {
+	args := m.Called(tx, productID, branchID, qty)
+	return args.Error(0)
+}
+func (m *MockProductBranchStockRepository) BranchesWithFullStock(items []models.QuoteItem) ([]uint, error) {
+	args := m.Called(items)
+	return args.Get(0).([]uint), args.Error(1)
+}
+func (m *MockProductBranchStockRepository) OutOfStockItemsForBranch(branchID uint, items []models.QuoteItem) ([]uint, error) {
+	args := m.Called(branchID, items)
+	return args.Get(0).([]uint), args.Error(1)
+}
+func (m *MockProductBranchStockRepository) DB() *gorm.DB {
+	return nil
+}
+
 // ============ Tests ============
 
 func TestCreateOrder_Success(t *testing.T) {
@@ -421,7 +461,7 @@ func TestCreateOrder_Success(t *testing.T) {
 	variantRepo := &MockProductVariantRepository{}
 	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, nil)
 
 	// Setup: Crear carrito con items
 	cart := &models.Cart{
@@ -489,7 +529,7 @@ func TestCreateOrder_EmptyCart(t *testing.T) {
 	variantRepo := &MockProductVariantRepository{}
 	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, nil)
 
 	// Setup: Carrito vacío
 	cart := &models.Cart{
@@ -520,7 +560,7 @@ func TestCreateOrder_CalculatesTax(t *testing.T) {
 	variantRepo := &MockProductVariantRepository{}
 	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, nil)
 
 	// Setup: Crear carrito
 	cart := &models.Cart{
@@ -568,7 +608,7 @@ func TestCreateGuestOrder_Success(t *testing.T) {
 	variantRepo := &MockProductVariantRepository{}
 	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, nil)
 
 	// Setup products
 	product := &models.Product{
@@ -626,7 +666,7 @@ func TestGetOrderByID_Success(t *testing.T) {
 	variantRepo := &MockProductVariantRepository{}
 	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, nil)
 
 	// Setup: Crear orden
 	order := &models.Order{
@@ -675,7 +715,7 @@ func TestGetOrdersByUserID_Success(t *testing.T) {
 	variantRepo := &MockProductVariantRepository{}
 	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, nil)
 
 	// Setup: Crear múltiples órdenes para el mismo usuario
 	order1 := &models.Order{
@@ -737,7 +777,7 @@ func TestUpdateOrderStatus_Success(t *testing.T) {
 	variantRepo := &MockProductVariantRepository{}
 	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, nil)
 
 	// Setup: Crear orden
 	order := &models.Order{
@@ -777,7 +817,7 @@ func TestUpdateOrderStatus_InvalidStatus(t *testing.T) {
 	variantRepo := &MockProductVariantRepository{}
 	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, nil)
 
 	// Setup: Crear orden
 	order := &models.Order{
@@ -807,7 +847,7 @@ func TestListAllOrders_Success(t *testing.T) {
 	variantRepo := &MockProductVariantRepository{}
 	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, nil)
 
 	// Setup: Crear múltiples órdenes
 	for i := 1; i <= 5; i++ {
@@ -846,7 +886,7 @@ func TestGenerateOrderNumber_Unique(t *testing.T) {
 	variantRepo := &MockProductVariantRepository{}
 	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, nil)
 
 	// Setup: Crear carrito
 	cart := &models.Cart{
@@ -891,6 +931,97 @@ func TestGenerateOrderNumber_Unique(t *testing.T) {
 
 // ============ Benchmark Tests ============
 
+func TestCreateOrder_WithStockReservation(t *testing.T) {
+	orderRepo := NewMockOrderRepository()
+	cartRepo := NewMockOrderCartRepository()
+	userRepo := &MockOrderUserRepository{}
+	paymentRepo := &MockPaymentRepository{}
+	productRepo := &MockProductRepository{}
+	variantRepo := &MockProductVariantRepository{}
+	guestRepo := &MockGuestRepository{}
+	stockRepo := new(MockProductBranchStockRepository)
+
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, stockRepo)
+
+	// Setup: Crear carrito con items
+	cart := &models.Cart{
+		UserID: 1,
+		Items: []models.CartItem{
+			{
+				ProductID: 1,
+				Quantity:  2,
+				Price:     100.0,
+				Product:   &models.Product{ID: 1, Name: "Product 1"},
+			},
+		},
+	}
+	cartRepo.carts[1] = cart
+
+	// Crear orden con sucursal origen
+	branchID := uint(1)
+	req := &models.CreateOrderRequest{
+		OriginBranchID: &branchID,
+		ShippingAddress: map[string]interface{}{
+			"street": "123 Main St",
+		},
+	}
+
+	// Expectation: stock reservation
+	stockRepo.On("IncrementReserved", mock.Anything, uint(1), uint(1), 2).Return(nil)
+
+	_, err := service.CreateOrder(1, req)
+
+	assert.NoError(t, err)
+	stockRepo.AssertExpectations(t)
+}
+
+func TestCreateGuestOrder_WithStockReservation(t *testing.T) {
+	orderRepo := NewMockOrderRepository()
+	cartRepo := NewMockOrderCartRepository()
+	userRepo := &MockOrderUserRepository{}
+	paymentRepo := &MockPaymentRepository{}
+	productRepo := &MockProductRepository{}
+	variantRepo := &MockProductVariantRepository{}
+	guestRepo := &MockGuestRepository{}
+	stockRepo := new(MockProductBranchStockRepository)
+
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, stockRepo)
+
+	// Setup product
+	product := &models.Product{
+		ID:          1,
+		Name:        "Simple Product",
+		SKU:         "SIMPLE-123",
+		PriceRetail: 100.0,
+	}
+	variantRepo.On("FindVariantCombinationBySKU", "SIMPLE-123").Return(nil, gorm.ErrRecordNotFound)
+	productRepo.On("FindBySKU", "SIMPLE-123").Return(product, nil)
+
+	branchID := uint(1)
+	req := &models.CreateGuestOrderRequest{
+		GuestEmail:     "guest@example.com",
+		OriginBranchID: &branchID,
+		Items: []models.GuestCartItem{
+			{
+				SKU:      "SIMPLE-123",
+				Quantity: 2,
+				Price:    100.0,
+			},
+		},
+		ShippingAddress: map[string]interface{}{
+			"street": "Guest St 123",
+		},
+	}
+
+	// Expectation: stock reservation
+	stockRepo.On("IncrementReserved", mock.Anything, uint(1), uint(1), 2).Return(nil)
+
+	_, err := service.CreateGuestOrder(req)
+
+	assert.NoError(t, err)
+	stockRepo.AssertExpectations(t)
+}
+
 func BenchmarkCreateOrder(b *testing.B) {
 	orderRepo := NewMockOrderRepository()
 	cartRepo := NewMockOrderCartRepository()
@@ -900,7 +1031,7 @@ func BenchmarkCreateOrder(b *testing.B) {
 	variantRepo := &MockProductVariantRepository{}
 	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, nil)
 
 	req := &models.CreateOrderRequest{
 		ShippingAddress: map[string]interface{}{
@@ -942,7 +1073,7 @@ func BenchmarkGetOrderByID(b *testing.B) {
 	variantRepo := &MockProductVariantRepository{}
 	guestRepo := &MockGuestRepository{}
 
-	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo)
+	service := NewOrderService(orderRepo, cartRepo, userRepo, paymentRepo, productRepo, variantRepo, guestRepo, nil)
 
 	// Setup: Crear órdenes
 	for i := 1; i <= 100; i++ {

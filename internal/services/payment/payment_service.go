@@ -192,6 +192,17 @@ func (s *paymentService) ExecutePayment(ctx context.Context, order models.Order,
 			Description: item.Product.Description,
 		})
 	}
+	// Sumamos el costo de envío como un ítem extra para que el total cobrado por
+	// MercadoPago coincida con payment.Amount (caso contrario el webhook falla
+	// con "payment amount mismatch").
+	if order.ShippingCost > 0 {
+		items = append(items, preferenceMp.ItemRequest{
+			Title:       "Envío",
+			Quantity:    1,
+			UnitPrice:   order.ShippingCost,
+			Description: fmt.Sprintf("Costo de envío (orden %s)", order.OrderNumber),
+		})
+	}
 
 	var payer preferenceMp.PayerRequest
 	if order.User != nil {
@@ -327,6 +338,14 @@ func (s *paymentService) ExecuteGuestPayment(ctx context.Context, order models.O
 			Quantity:    item.Quantity,
 			UnitPrice:   item.Price * 1.21,
 			Description: item.Product.Description,
+		})
+	}
+	if order.ShippingCost > 0 {
+		items = append(items, preferenceMp.ItemRequest{
+			Title:       "Envío",
+			Quantity:    1,
+			UnitPrice:   order.ShippingCost,
+			Description: fmt.Sprintf("Costo de envío (orden %s)", order.OrderNumber),
 		})
 	}
 
