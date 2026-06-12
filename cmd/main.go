@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -19,6 +21,21 @@ func init() {
 }
 
 func main() {
+	// En producción los valores sensibles vienen de SSM Parameter Store, no
+	// del .env en disco. Se activa con SECRETS_PROVIDER=ssm (o ENV=production)
+	// y el prefijo se controla con SSM_PATH_PREFIX (default /el-campeon/prod/).
+	if useSSM() {
+		prefix := os.Getenv("SSM_PATH_PREFIX")
+		if prefix == "" {
+			prefix = "/el-campeon/prod/"
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := config.LoadSecretsFromSSM(ctx, prefix); err != nil {
+			log.Fatalf("Failed to load secrets from SSM: %v", err)
+		}
+	}
+
 	// Cargar configuración
 	cfg := config.Load()
 
@@ -54,6 +71,16 @@ func main() {
 	if err := router.Run(addr); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
+}
+
+func useSSM() bool {
+	switch os.Getenv("SECRETS_PROVIDER") {
+	case "ssm":
+		return true
+	case "env", "none":
+		return false
+	}
+	return os.Getenv("ENV") == "production"
 }
 
 func corsMiddleware() gin.HandlerFunc {
