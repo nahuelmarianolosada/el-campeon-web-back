@@ -2,42 +2,20 @@
 # Las imágenes se construyen en GitHub Actions y se publican en GHCR;
 # la instancia solo hace `pull` (nunca compila -> sin riesgo de OOM).
 #
-# Requiere un archivo .env en el mismo directorio (NO se commitea).
+# La DB es RDS (no corre como contenedor). El host y las credenciales se
+# resuelven en runtime desde SSM Parameter Store (ver internal/config/secrets.go).
+#
+# Requiere un archivo .env en el mismo directorio (NO se commitea) con la
+# config NO sensible: PORT, ENV=production, SECRETS_PROVIDER=ssm,
+# SSM_PATH_PREFIX, AWS_REGION, JWT_EXPIRY_HOURS, API_BASE_URL, SMTP_HOST,
+# SMTP_PORT, SMTP_FROM_EMAIL.
 services:
-  db:
-    image: mysql:8.0
-    container_name: el_campeon_db
-    environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${DB_NAME}
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "127.0.0.1:3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
-    networks:
-      - el_campeon_network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      timeout: 20s
-      retries: 10
-      interval: 10s
-    restart: unless-stopped
-
   back:
     image: ghcr.io/nahuelmarianolosada/el-campeon-web-back:latest
     container_name: el_campeon_back
     env_file: .env
-    environment:
-      DB_HOST: db        # nombre del servicio en la red de docker
-      DB_PORT: 3306
     ports:
       - "127.0.0.1:8080:8080"
-    depends_on:
-      db:
-        condition: service_healthy
     networks:
       - el_campeon_network
     restart: unless-stopped
@@ -64,6 +42,3 @@ services:
 networks:
   el_campeon_network:
     driver: bridge
-
-volumes:
-  mysql_data:
