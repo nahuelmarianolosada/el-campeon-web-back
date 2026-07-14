@@ -152,6 +152,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, cfg *config.Config) {
 			paymentGroup.GET("/my", paymentHandler.GetMyPayments)
 			paymentGroup.GET("/:id", paymentHandler.GetPayment)
 			paymentGroup.GET("/order/:orderId", paymentHandler.GetPaymentByOrderID)
+			paymentGroup.POST("/:id/cancel", paymentHandler.CancelPayment)
 		}
 	}
 

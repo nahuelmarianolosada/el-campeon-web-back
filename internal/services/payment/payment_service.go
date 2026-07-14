@@ -25,6 +25,7 @@ type PaymentService interface {
 	GetPaymentsByUserID(userID uint, limit, offset int) ([]models.PaymentResponse, error)
 	GetPaymentByOrderID(orderID uint) (*models.PaymentResponse, error)
 	UpdatePaymentStatus(paymentID uint, status string) (*models.PaymentResponse, error)
+	CancelPayment(ctx context.Context, paymentID uint) (*models.PaymentResponse, error)
 	ProcessMercadopagoWebhook(ctx context.Context, webhook *models.MercadopagoWebhookRequest, xSignature string, xRequestId string) error
 	ListAllPayments(limit, offset int) ([]models.PaymentResponse, error)
 }
@@ -448,6 +449,85 @@ func (s *paymentService) UpdatePaymentStatus(paymentID uint, status string) (*mo
 	log.Printf("[paymentService.UpdatePaymentStatus] INFO: Payment status updated - paymentID=%d, oldStatus=%s, newStatus=%s", paymentID, currentPayment.Status, status)
 
 	return s.toPaymentResponse(currentPayment), nil
+}
+
+// CancelPayment cancela un pago a pedido del usuario.
+// Si el pago todavía no fue confirmado (PENDING) se cancela localmente.
+// Si el pago ya fue confirmado (APPROVED) se solicita el reembolso a MercadoPago
+// https://www.mercadopago.com.ar/developers/es/reference/online-payments/checkout-api-payments/create-refund/post
+func (s *paymentService) CancelPayment(ctx context.Context, paymentID uint) (*models.PaymentResponse, error) {
+	log.Printf("[paymentService.CancelPayment] INFO: Starting payment cancellation - paymentID=%d", paymentID)
+
+	payment, err := s.paymentRepo.FindByID(paymentID)
+	if err != nil {
+		log.Printf("[paymentService.CancelPayment] ERROR: Failed to find payment - paymentID=%d: %v", paymentID, err)
+		return nil, fmt.Errorf("error finding payment: %w", err)
+	}
+
+	switch payment.Status {
+	case paymentStatus.Pending:
+		if !paymentStatus.IsValidTransition(payment.Status, paymentStatus.Cancelled) {
+			log.Printf("[paymentService.CancelPayment] WARNING: Invalid status transition - paymentID=%d, currentStatus=%s", paymentID, payment.Status)
+			return nil, fmt.Errorf("invalid payment status transition from %s to %s", payment.Status, paymentStatus.Cancelled)
+		}
+		payment.Status = paymentStatus.Cancelled
+		log.Printf("[paymentService.CancelPayment] INFO: Payment not yet confirmed, cancelling locally - paymentID=%d", paymentID)
+
+	case paymentStatus.Approved:
+		if payment.MercadopagoPaymentID == "" {
+			log.Printf("[paymentService.CancelPayment] ERROR: Approved payment missing MercadopagoPaymentID - paymentID=%d", paymentID)
+			return nil, fmt.Errorf("cannot refund payment: missing mercadopago payment id")
+		}
+
+		if s.mercadopagoClient == nil {
+			cfg, err := config.New(s.config.MercadopagoAccessToken)
+			if err != nil {
+				return nil, fmt.Errorf("mp config error: %w", err)
+			}
+			client := preferenceMp.NewClient(cfg)
+			s.mercadopagoClient = NewDefaultMercadopagoClient(client, s.config.MercadopagoAccessToken)
+		}
+
+		refund, err := s.mercadopagoClient.RefundPayment(ctx, payment.MercadopagoPaymentID)
+		if err != nil {
+			log.Printf("[paymentService.CancelPayment] ERROR: Failed to refund payment via MercadoPago - paymentID=%d, mpPaymentID=%s: %v", paymentID, payment.MercadopagoPaymentID, err)
+			return nil, fmt.Errorf("error refunding payment: %w", err)
+		}
+		log.Printf("[paymentService.CancelPayment] INFO: Payment refunded via MercadoPago - paymentID=%d, mpPaymentID=%s, refundID=%d", paymentID, payment.MercadopagoPaymentID, refund.ID)
+
+		if !paymentStatus.IsValidTransition(payment.Status, paymentStatus.Refunded) {
+			log.Printf("[paymentService.CancelPayment] WARNING: Invalid status transition - paymentID=%d, currentStatus=%s", paymentID, payment.Status)
+			return nil, fmt.Errorf("invalid payment status transition from %s to %s", payment.Status, paymentStatus.Refunded)
+		}
+		payment.Status = paymentStatus.Refunded
+
+		refundBytes, err := json.Marshal(refund)
+		if err != nil {
+			log.Printf("[paymentService.CancelPayment] ERROR: Failed to marshal refund data - paymentID=%d: %v", paymentID, err)
+			return nil, fmt.Errorf("error marshaling refund data: %w", err)
+		}
+		if payment.MercadopagoData == nil {
+			payment.MercadopagoData = datatypes.JSONMap{}
+		}
+		payment.MercadopagoData["refund"] = string(refundBytes)
+
+	default:
+		log.Printf("[paymentService.CancelPayment] WARNING: Payment cannot be cancelled from current status - paymentID=%d, status=%s", paymentID, payment.Status)
+		return nil, fmt.Errorf("payment cannot be cancelled from status %s", payment.Status)
+	}
+
+	if err := s.paymentRepo.Update(payment); err != nil {
+		log.Printf("[paymentService.CancelPayment] ERROR: Failed to update payment - paymentID=%d: %v", paymentID, err)
+		return nil, fmt.Errorf("error updating payment: %w", err)
+	}
+
+	if err := s.orderRepo.UpdateStatus(payment.OrderID, orderStatus.Cancelled); err != nil {
+		log.Printf("[paymentService.CancelPayment] ERROR: Failed to update order status - orderID=%d: %v", payment.OrderID, err)
+		return nil, fmt.Errorf("error updating order status: %w", err)
+	}
+
+	log.Printf("[paymentService.CancelPayment] INFO: Payment cancelled successfully - paymentID=%d, newStatus=%s", paymentID, payment.Status)
+	return s.toPaymentResponse(payment), nil
 }
 
 // ProcessMercadopagoWebhook procesa webhooks de MercadoPago
