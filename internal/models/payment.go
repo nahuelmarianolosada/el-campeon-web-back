@@ -64,6 +64,16 @@ type MercadopagoWebhookRequest struct {
 	} `json:"data"`
 }
 
+// MercadopagoRefundResponse estructura para la respuesta de un reembolso de MP
+// https://www.mercadopago.com.ar/developers/es/reference/online-payments/checkout-api-payments/create-refund/post
+type MercadopagoRefundResponse struct {
+	ID          int64   `json:"id"`
+	PaymentID   int64   `json:"payment_id"`
+	Amount      float64 `json:"amount"`
+	Status      string  `json:"status"`
+	DateCreated string  `json:"date_created"`
+}
+
 // MercadopagoPaymentDetailsResponse estructura para la respuesta de detalles del pago de MP
 type MercadopagoPaymentDetailsResponse struct {
 	ID                int64   `json:"id"`

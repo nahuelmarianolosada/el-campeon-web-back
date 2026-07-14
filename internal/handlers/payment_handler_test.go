@@ -66,6 +66,14 @@ func (m *mockPaymentService) UpdatePaymentStatus(id uint, status string) (*model
 	return args.Get(0).(*models.PaymentResponse), args.Error(1)
 }
 
+func (m *mockPaymentService) CancelPayment(ctx context.Context, paymentID uint) (*models.PaymentResponse, error) {
+	args := m.Called(ctx, paymentID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.PaymentResponse), args.Error(1)
+}
+
 func (m *mockPaymentService) ProcessMercadopagoWebhook(ctx context.Context, webhook *models.MercadopagoWebhookRequest, xSignature string, xRequestId string) error {
 	args := m.Called(ctx, webhook, xSignature, xRequestId)
 	return args.Error(0)
@@ -316,6 +324,57 @@ func TestUpdatePaymentStatus_MissingStatusInBody_Returns400(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestCancelPayment_Unauthenticated_Returns401(t *testing.T) {
+	svc := new(mockPaymentService)
+	r, h := newPaymentRouter(svc)
+	r.POST("/payments/:id/cancel", h.CancelPayment)
+
+	req := httptest.NewRequest("POST", "/payments/1/cancel", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestCancelPayment_InvalidID_Returns400(t *testing.T) {
+	svc := new(mockPaymentService)
+	r, h := newPaymentRouter(svc)
+	r.POST("/payments/:id/cancel", func(c *gin.Context) { c.Set("user_id", uint(1)); h.CancelPayment(c) })
+
+	req := httptest.NewRequest("POST", "/payments/abc/cancel", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestCancelPayment_Success(t *testing.T) {
+	svc := new(mockPaymentService)
+	svc.On("CancelPayment", mock.Anything, uint(1)).Return(
+		&models.PaymentResponse{ID: 1, Status: "CANCELLED"}, nil,
+	)
+	r, h := newPaymentRouter(svc)
+	r.POST("/payments/:id/cancel", func(c *gin.Context) { c.Set("user_id", uint(1)); h.CancelPayment(c) })
+
+	req := httptest.NewRequest("POST", "/payments/1/cancel", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `"status":"CANCELLED"`)
+	svc.AssertExpectations(t)
+}
+
+func TestCancelPayment_ServiceError_Returns400(t *testing.T) {
+	svc := new(mockPaymentService)
+	svc.On("CancelPayment", mock.Anything, uint(1)).Return(nil, errors.New("payment cannot be cancelled from status REJECTED"))
+	r, h := newPaymentRouter(svc)
+	r.POST("/payments/:id/cancel", func(c *gin.Context) { c.Set("user_id", uint(1)); h.CancelPayment(c) })
+
+	req := httptest.NewRequest("POST", "/payments/1/cancel", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	svc.AssertExpectations(t)
 }
 
 func TestMercadopagoWebhook_MissingSignature_Returns401(t *testing.T) {

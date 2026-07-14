@@ -16,6 +16,7 @@ import (
 type MercadopagoClient interface {
 	CreatePreference(ctx context.Context, req preferenceMp.Request) (*preferenceMp.Response, error)
 	GetPaymentDetails(ctx context.Context, paymentID string) (*models.MercadopagoPaymentDetailsResponse, error)
+	RefundPayment(ctx context.Context, paymentID string) (*models.MercadopagoRefundResponse, error)
 }
 
 // DefaultMercadopagoClient implementa MercadopagoClient usando el SDK oficial
@@ -88,4 +89,49 @@ func (c *DefaultMercadopagoClient) GetPaymentDetails(ctx context.Context, paymen
 
 	log.Printf("[DefaultMercadopagoClient.GetPaymentDetails] INFO: Payment details retrieved successfully - mpPaymentID=%d, status=%s", paymentDetails.ID, paymentDetails.Status)
 	return &paymentDetails, nil
+}
+
+// RefundPayment solicita un reembolso total de un pago ya aprobado
+// https://www.mercadopago.com.ar/developers/es/reference/online-payments/checkout-api-payments/create-refund/post
+func (c *DefaultMercadopagoClient) RefundPayment(ctx context.Context, paymentID string) (*models.MercadopagoRefundResponse, error) {
+	log.Printf("[DefaultMercadopagoClient.RefundPayment] INFO: Requesting refund - mpPaymentID=%s", paymentID)
+	url := fmt.Sprintf("https://api.mercadopago.com/v1/payments/%s/refunds", paymentID)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		log.Printf("[DefaultMercadopagoClient.RefundPayment] ERROR: Failed to create request: %v", err)
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Idempotency-Key", fmt.Sprintf("refund-payment-%s", paymentID))
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[DefaultMercadopagoClient.RefundPayment] ERROR: Failed to execute request: %v", err)
+		return nil, fmt.Errorf("error executing request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[DefaultMercadopagoClient.RefundPayment] ERROR: Failed to read response body: %v", err)
+		return nil, fmt.Errorf("error reading response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		log.Printf("[DefaultMercadopagoClient.RefundPayment] ERROR: MP API returned non-OK status - status=%d, body=%s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("mercadopago api returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var refund models.MercadopagoRefundResponse
+	if err := json.Unmarshal(body, &refund); err != nil {
+		log.Printf("[DefaultMercadopagoClient.RefundPayment] ERROR: Failed to unmarshal response: %v", err)
+		return nil, fmt.Errorf("error unmarshaling response: %w", err)
+	}
+
+	log.Printf("[DefaultMercadopagoClient.RefundPayment] INFO: Refund created successfully - refundID=%d, mpPaymentID=%s", refund.ID, paymentID)
+	return &refund, nil
 }

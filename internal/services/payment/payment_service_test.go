@@ -41,6 +41,14 @@ func (m *MockMercadopagoClient) GetPaymentDetails(ctx context.Context, paymentID
 	return args.Get(0).(*models.MercadopagoPaymentDetailsResponse), args.Error(1)
 }
 
+func (m *MockMercadopagoClient) RefundPayment(ctx context.Context, paymentID string) (*models.MercadopagoRefundResponse, error) {
+	args := m.Called(ctx, paymentID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.MercadopagoRefundResponse), args.Error(1)
+}
+
 type MockPaymentRepository struct {
 	mock.Mock
 }
@@ -498,6 +506,124 @@ func TestUpdatePaymentStatus(t *testing.T) {
 		assert.Nil(t, resp)
 		assert.Contains(t, err.Error(), "error updating payment")
 		freshRepo.AssertExpectations(t)
+	})
+}
+
+func TestCancelPayment(t *testing.T) {
+	t.Run("PendingPayment_CancelledLocally", func(t *testing.T) {
+		paymentRepo := new(MockPaymentRepository)
+		orderRepo := new(MockOrderRepository)
+		mpClient := new(MockMercadopagoClient)
+		service := NewPaymentServiceWithClient(paymentRepo, orderRepo, &config.Config{}, mpClient)
+
+		pendingPayment := &models.Payment{ID: 1, OrderID: 10, Status: paymentStatus.Pending}
+		paymentRepo.On("FindByID", uint(1)).Return(pendingPayment, nil).Once()
+		paymentRepo.On("Update", mock.AnythingOfType("*models.Payment")).Return(nil).Run(func(args mock.Arguments) {
+			p := args.Get(0).(*models.Payment)
+			assert.Equal(t, paymentStatus.Cancelled, p.Status)
+		}).Once()
+		orderRepo.On("UpdateStatus", uint(10), orderStatus.Cancelled).Return(nil).Once()
+
+		resp, err := service.CancelPayment(context.Background(), 1)
+
+		assert.NoError(t, err)
+		assert.Equal(t, paymentStatus.Cancelled, resp.Status)
+		paymentRepo.AssertExpectations(t)
+		orderRepo.AssertExpectations(t)
+		mpClient.AssertExpectations(t)
+	})
+
+	t.Run("ApprovedPayment_RefundedViaMercadopago", func(t *testing.T) {
+		paymentRepo := new(MockPaymentRepository)
+		orderRepo := new(MockOrderRepository)
+		mpClient := new(MockMercadopagoClient)
+		service := NewPaymentServiceWithClient(paymentRepo, orderRepo, &config.Config{}, mpClient)
+
+		approvedPayment := &models.Payment{ID: 2, OrderID: 20, Status: paymentStatus.Approved, MercadopagoPaymentID: "999"}
+		paymentRepo.On("FindByID", uint(2)).Return(approvedPayment, nil).Once()
+		mpClient.On("RefundPayment", mock.Anything, "999").Return(&models.MercadopagoRefundResponse{
+			ID:        1,
+			PaymentID: 999,
+			Status:    "approved",
+		}, nil).Once()
+		paymentRepo.On("Update", mock.AnythingOfType("*models.Payment")).Return(nil).Run(func(args mock.Arguments) {
+			p := args.Get(0).(*models.Payment)
+			assert.Equal(t, paymentStatus.Refunded, p.Status)
+		}).Once()
+		orderRepo.On("UpdateStatus", uint(20), orderStatus.Cancelled).Return(nil).Once()
+
+		resp, err := service.CancelPayment(context.Background(), 2)
+
+		assert.NoError(t, err)
+		assert.Equal(t, paymentStatus.Refunded, resp.Status)
+		paymentRepo.AssertExpectations(t)
+		orderRepo.AssertExpectations(t)
+		mpClient.AssertExpectations(t)
+	})
+
+	t.Run("ApprovedPayment_MissingMercadopagoPaymentID", func(t *testing.T) {
+		paymentRepo := new(MockPaymentRepository)
+		orderRepo := new(MockOrderRepository)
+		service := NewPaymentService(paymentRepo, orderRepo, nil)
+
+		approvedPayment := &models.Payment{ID: 3, OrderID: 30, Status: paymentStatus.Approved}
+		paymentRepo.On("FindByID", uint(3)).Return(approvedPayment, nil).Once()
+
+		resp, err := service.CancelPayment(context.Background(), 3)
+
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Contains(t, err.Error(), "missing mercadopago payment id")
+		paymentRepo.AssertExpectations(t)
+	})
+
+	t.Run("ApprovedPayment_RefundError", func(t *testing.T) {
+		paymentRepo := new(MockPaymentRepository)
+		orderRepo := new(MockOrderRepository)
+		mpClient := new(MockMercadopagoClient)
+		service := NewPaymentServiceWithClient(paymentRepo, orderRepo, &config.Config{}, mpClient)
+
+		approvedPayment := &models.Payment{ID: 4, OrderID: 40, Status: paymentStatus.Approved, MercadopagoPaymentID: "111"}
+		paymentRepo.On("FindByID", uint(4)).Return(approvedPayment, nil).Once()
+		mpClient.On("RefundPayment", mock.Anything, "111").Return(nil, errors.New("mp api error")).Once()
+
+		resp, err := service.CancelPayment(context.Background(), 4)
+
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Contains(t, err.Error(), "error refunding payment")
+		paymentRepo.AssertExpectations(t)
+		mpClient.AssertExpectations(t)
+	})
+
+	t.Run("AlreadyCancelled_ReturnsError", func(t *testing.T) {
+		paymentRepo := new(MockPaymentRepository)
+		orderRepo := new(MockOrderRepository)
+		service := NewPaymentService(paymentRepo, orderRepo, nil)
+
+		cancelledPayment := &models.Payment{ID: 5, OrderID: 50, Status: paymentStatus.Cancelled}
+		paymentRepo.On("FindByID", uint(5)).Return(cancelledPayment, nil).Once()
+
+		resp, err := service.CancelPayment(context.Background(), 5)
+
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Contains(t, err.Error(), "payment cannot be cancelled from status")
+		paymentRepo.AssertExpectations(t)
+	})
+
+	t.Run("PaymentNotFound", func(t *testing.T) {
+		paymentRepo := new(MockPaymentRepository)
+		orderRepo := new(MockOrderRepository)
+		service := NewPaymentService(paymentRepo, orderRepo, nil)
+
+		paymentRepo.On("FindByID", uint(6)).Return(nil, errors.New("not found")).Once()
+
+		resp, err := service.CancelPayment(context.Background(), 6)
+
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+		paymentRepo.AssertExpectations(t)
 	})
 }
 

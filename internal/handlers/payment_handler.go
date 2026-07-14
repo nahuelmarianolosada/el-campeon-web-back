@@ -218,6 +218,40 @@ func (h *PaymentHandler) UpdatePaymentStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, payment)
 }
 
+// CancelPayment cancela un pago propio
+// Si el pago aún no fue confirmado se cancela localmente; si ya fue aprobado
+// se solicita el reembolso a MercadoPago
+// @Summary Cancelar un pago
+// @Tags Pagos
+// @Security Bearer
+// @Produce json
+// @Param id path int true "ID del pago"
+// @Success 200 {object} models.PaymentResponse
+// @Failure 400 {object} gin.H
+// @Router /api/payments/:id/cancel [post]
+func (h *PaymentHandler) CancelPayment(c *gin.Context) {
+	ctx := c.Request.Context()
+	_, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payment id"})
+		return
+	}
+
+	payment, err := h.paymentService.CancelPayment(ctx, uint(id))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, payment)
+}
+
 // ListAllPayments lista todos los pagos (solo ADMIN)
 // @Summary Listar todos los pagos
 // @Tags Pagos
